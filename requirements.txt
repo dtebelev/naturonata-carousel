@@ -1,6 +1,5 @@
 streamlit
 openai
 fal-client
-playwright
 Pillow
 requests
