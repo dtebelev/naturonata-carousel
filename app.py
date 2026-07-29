@@ -772,10 +772,21 @@ if st.session_state.carousel_html:
     st.components.v1.html(st.session_state.carousel_html, height=format_info["preview_h"] + 100, scrolling=False)
     st.markdown('</div>', unsafe_allow_html=True)
 
-    st.markdown('<div class="step-header">8️⃣ Экспорт в PNG</div>', unsafe_allow_html=True)
-    
+    st.markdown('<div class="step-header">8️⃣ Скачать слайды</div>', unsafe_allow_html=True)
+
+    # ── Кнопка: скачать HTML-файл карусели ──
+    st.markdown("**Способ 1: Скачать HTML-файл** (откройте в браузере и сделайте скриншоты)")
+    st.download_button(
+        "📥 Скачать carousel.html", 
+        st.session_state.carousel_html.encode("utf-8"), 
+        "carousel.html", "text/html",
+        help="Скачайте HTML-файл, откройте в браузере и делайте скриншоты каждого слайда"
+    )
+
+    # ── Кнопка: скачать PNG через Playwright (только локально) ──
+    st.markdown("**Способ 2: PNG-экспорт** (работает только при локальном запуске)")
     if not _playwright_available:
-        st.info("💡 PNG-экспорт работает только при локальном запуске. На Streamlit Cloud превью доступно, но экспорт PNG — нет. Для экспорта запустите программу на своём компьютере (инструкция в README.md).")
+        st.caption("⚠️ На Streamlit Cloud PNG-экспорт недоступен. Для PNG запустите программу на своём компьютере.")
     
     ec1, ec2 = st.columns([1, 1])
     with ec1: export_btn = st.button("📥 Экспортировать в PNG", type="primary", use_container_width=True, disabled=not _playwright_available)
