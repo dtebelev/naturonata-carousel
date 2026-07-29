@@ -19,41 +19,12 @@ import tempfile
 import asyncio
 import re
 import zipfile
-import subprocess
 from pathlib import Path
 from io import BytesIO
 
 import requests
 
-# ─── Автоустановка Playwright Chromium (для Streamlit Cloud) ─────────
-def ensure_playwright():
-    """Install Playwright Chromium if not already installed."""
-    try:
-        from playwright.sync_api import sync_playwright
-        with sync_playwright() as p:
-            browser = p.chromium.launch(args=["--no-sandbox"])
-            browser.close()
-        return True
-    except Exception:
-        pass
-    
-    # Try installing Chromium
-    try:
-        result = subprocess.run(
-            [sys.executable, "-m", "playwright", "install", "chromium"],
-            capture_output=True, text=True, timeout=120
-        )
-        # Verify installation
-        from playwright.sync_api import sync_playwright
-        with sync_playwright() as p:
-            browser = p.chromium.launch(args=["--no-sandbox"])
-            browser.close()
-        return True
-    except Exception as e:
-        st.warning(f"⚠️ Playwright не установлен: {e}")
-        return False
-
-# Check Playwright availability
+# ─── Проверка Playwright (необязательный) ────────────────────────────
 _playwright_available = False
 try:
     from playwright.sync_api import sync_playwright
@@ -62,7 +33,7 @@ try:
         browser.close()
     _playwright_available = True
 except Exception:
-    _playwright_available = ensure_playwright()
+    pass
 
 # ─── Конфигурация страницы ───────────────────────────────────────────
 st.set_page_config(
@@ -558,6 +529,25 @@ async def export_slides_to_png(html_path, output_dir, total_slides, slide_w, sli
     return exported
 
 
+def export_slides_to_png_sync(html_path, output_dir, total_slides, slide_w, slide_h, preview_w, preview_h):
+    """Sync wrapper for export — runs in existing event loop or new one."""
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = None
+    if loop and loop.is_running():
+        import concurrent.futures
+        with concurrent.futures.ThreadPoolExecutor() as pool:
+            result = pool.submit(asyncio.run, export_slides_to_png(
+                html_path, output_dir, total_slides, slide_w, slide_h, preview_w, preview_h
+            )).result()
+        return result
+    else:
+        return asyncio.run(export_slides_to_png(
+            html_path, output_dir, total_slides, slide_w, slide_h, preview_w, preview_h
+        ))
+
+
 # ═════════════════════════════════════════════════════════════════════
 #  БОКОВАЯ ПАНЕЛЬ
 # ═════════════════════════════════════════════════════════════════════
@@ -783,34 +773,35 @@ if st.session_state.carousel_html:
     st.markdown('</div>', unsafe_allow_html=True)
 
     st.markdown('<div class="step-header">8️⃣ Экспорт в PNG</div>', unsafe_allow_html=True)
+    
+    if not _playwright_available:
+        st.info("💡 PNG-экспорт работает только при локальном запуске. На Streamlit Cloud превью доступно, но экспорт PNG — нет. Для экспорта запустите программу на своём компьютере (инструкция в README.md).")
+    
     ec1, ec2 = st.columns([1, 1])
-    with ec1: export_btn = st.button("📥 Экспортировать в PNG", type="primary", use_container_width=True)
+    with ec1: export_btn = st.button("📥 Экспортировать в PNG", type="primary", use_container_width=True, disabled=not _playwright_available)
     with ec2:
         if st.session_state.exported_slides: st.info(f"✅ {len(st.session_state.exported_slides)} слайдов готовы")
 
-    if export_btn:
-        if not _playwright_available:
-            st.error("❌ PNG-экспорт недоступен — не удалось запустить браузер Playwright. Это ограничение Streamlit Cloud. Для PNG-экспорта запустите программу локально на своём компьютере.")
-        else:
-            with st.spinner("🔄 Экспорт..."):
-                try:
-                    html_path = st.session_state.get("html_path", "")
-                    if not html_path or not os.path.exists(html_path):
-                        tmp_dir = tempfile.mkdtemp()
-                        html_path = os.path.join(tmp_dir, "carousel.html")
-                        with open(html_path, "w", encoding="utf-8") as f: f.write(st.session_state.carousel_html)
-                        st.session_state.html_path = html_path
-                    embed_fonts_in_html(html_path, font_choice)
-                    output_dir = os.path.join(os.path.dirname(html_path), "slides")
-                    exported = asyncio.run(export_slides_to_png(
-                        html_path=html_path, output_dir=output_dir,
-                        total_slides=len(st.session_state.carousel_data),
-                        slide_w=format_info["w"], slide_h=format_info["h"],
-                        preview_w=format_info["preview_w"], preview_h=format_info["preview_h"],
-                    ))
-                    st.session_state.exported_slides = exported
-                    st.success(f"✅ Экспортировано {len(exported)} слайдов ({format_info['w']}×{format_info['h']}px)!")
-                except Exception as e: st.error(f"❌ Ошибка экспорта: {e}")
+    if export_btn and _playwright_available:
+        with st.spinner("🔄 Экспорт..."):
+            try:
+                html_path = st.session_state.get("html_path", "")
+                if not html_path or not os.path.exists(html_path):
+                    tmp_dir = tempfile.mkdtemp()
+                    html_path = os.path.join(tmp_dir, "carousel.html")
+                    with open(html_path, "w", encoding="utf-8") as f: f.write(st.session_state.carousel_html)
+                    st.session_state.html_path = html_path
+                embed_fonts_in_html(html_path, font_choice)
+                output_dir = os.path.join(os.path.dirname(html_path), "slides")
+                exported = export_slides_to_png_sync(
+                    html_path=html_path, output_dir=output_dir,
+                    total_slides=len(st.session_state.carousel_data),
+                    slide_w=format_info["w"], slide_h=format_info["h"],
+                    preview_w=format_info["preview_w"], preview_h=format_info["preview_h"],
+                )
+                st.session_state.exported_slides = exported
+                st.success(f"✅ Экспортировано {len(exported)} слайдов ({format_info['w']}×{format_info['h']}px)!")
+            except Exception as e: st.error(f"❌ Ошибка экспорта: {e}")
 
     if st.session_state.exported_slides:
         st.subheader("📂 Слайды")
@@ -833,5 +824,3 @@ if st.session_state.carousel_html:
 
 st.divider()
 st.markdown("""<div style="text-align:center;color:#666;padding:2rem 0;"><p>📸 Naturonata Carousel Generator • GPT-4 + FLUX-2/Flash + Playwright</p></div>""", unsafe_allow_html=True)
-
-
