@@ -79,7 +79,7 @@ FLUX_MODELS = {
 # ═════════════════════════════════════════════════════════════════════
 
 AUDIENCES = {
-    "🧒 Мамы: первые тревоги и свежий диагноз РАС/ЗПРР": {
+    "  Мамы: первые тревоги и свежий диагноз РАС/ЗПРР": {
         "description": "Мать ребёнка 2–7 лет с РАС/ЗПРР, только начавшая обследование. Пищевой откат, отсутствие речи, новые заключения, советы из чатов.",
         "cta_goal": "Перейти в Telegram-канал Naturonata",
         "pain_points": "Ограниченный рацион ребёнка, задержка речи, отсутствие контакта, хаос рекомендаций, страх навредить, дефицит нутриентов",
@@ -89,7 +89,7 @@ AUDIENCES = {
         "cta_text": "Подпишись на канал @naturonata — там пошаговые советы и поддержка",
         "stat": "72% детей с аутизмом едят очень узкий набор продуктов",
     },
-    "🍽️ Мамы: избирательность в еде, ЖКТ, выгорание": {
+    "  Мамы: избирательность в еде, ЖКТ, выгорание": {
         "description": "Мать ребёнка 3–12 лет с РАС/ЗПРР. Выстроенный маршрут, но застой: ест 5 продуктов, запоры, вздутие, скачки поведения, нарушения сна.",
         "cta_goal": "Перейти в Telegram-канал Naturonata",
         "pain_points": "Избирательность в еде (5 продуктов), хронические запоры, нарушение сна, выгорание, отсутствие специалистов в регионах",
@@ -99,7 +99,7 @@ AUDIENCES = {
         "cta_text": "В канале @naturonata — реальные истории и рабочие шаги",
         "stat": "46–89% детей с аутизмом имеют трудности с кормлением",
     },
-    "🏥 Родители: ДЦП и/или эпилепсия, медицинские риски": {
+    "  Родители: ДЦП и/или эпилепсия, медицинские риски": {
         "description": "Семьи детей 1–14 лет с ДЦП и/или эпилепсией. Недостаточный вес, дисфагия, запоры, кетодиета, вопросы о медицинской диете.",
         "cta_goal": "Перейти в Telegram-канал Naturonata",
         "pain_points": "Трёхчасовые кормления, страх подавиться, запоры, кетодиета с побочными эффектами, недосып, отсутствие системной помощи",
@@ -109,7 +109,7 @@ AUDIENCES = {
         "cta_text": "В @naturonata — про питание при ДЦП и эпилепсии с доказательствами",
         "stat": "92% детей с ДЦП имеют проблемы с ЖКТ",
     },
-    "👨 Папы и финансовые со-решатели": {
+    "  Папы и финансовые со-решатели": {
         "description": "Отец 30–50 лет, редко сам ищет информацию, но участвует в согласовании дорогих решений. Включается на этапе оплаты и оценки рисков.",
         "cta_goal": "Перейти в Telegram-канал Naturonata",
         "pain_points": "Недоверие к специалистам, море противоречивых советов, неясный план и расходы, скрытые платежи",
@@ -119,7 +119,7 @@ AUDIENCES = {
         "cta_text": "Канал @naturonata — доказательный подход к питанию. Без «чудес».",
         "stat": "59% взрослых в России имеют избыточный вес",
     },
-    "👩‍⚕️ Логопеды и специалисты-рефереры": {
+    "  Логопеды и специалисты-рефереры": {
         "description": "Логопеды, дефектологи, ABA-специалисты, неврологи, детские центры. Направляют семьи к специалистам по питанию.",
         "cta_goal": "Перейти в Telegram-канал Naturonata (для профессионального роста и направления семей)",
         "pain_points": "Фрагментарные знания по питанию, засилье «гуру» с детоксами, страх навредить рекомендацией, нехватка надёжных партнёров",
@@ -129,7 +129,7 @@ AUDIENCES = {
         "cta_text": "Канал @naturonata — для специалистов, которые ищут надёжного партнёра",
         "stat": "Только 40% медработников чувствуют уверенность в диетологических рекомендациях",
     },
-    "🤝 Админы сообществ и родительские лидеры": {
+    "  Админы сообществ и родительские лидеры": {
         "description": "Люди, управляющие чатами, форумами, НКО-проектами. Сами родители особых детей. Ищут контент для сообществ.",
         "cta_goal": "Перейти в Telegram-канал Naturonata",
         "pain_points": "Хронический дефицит времени, нехватка знаний, фильтрация псевдонауки, эмоциональная нагрузка модерации",
@@ -142,49 +142,49 @@ AUDIENCES = {
 }
 
 CONTENT_FORMATS = {
-    "🧩 Викторина (Quiz)": {
+    "  Викторина (Quiz)": {
         "icon": "🧩", "description": "Вопрос-ответ. Заставляет остановиться и подумать.",
         "structure": "Хук-вопрос → Варианты → Правильный ответ → Объяснение → CTA",
         "prompt_suffix": "Формат: ВИКТОРИНА. Начни с интригующего вопроса про питание или здоровье ребёнка. Дай варианты ответов (А, Б, В). Затем раскрой правильный ответ с объяснением. Используй статистику для убедительности.",
         "name": "ВИКТОРИНА",
     },
-    "📋 Пошаговый гайд": {
+    "  Пошаговый гайд": {
         "icon": "📋", "description": "Пошаговая инструкция. Высокая сохраняемость.",
         "structure": "Хук-обещание → Шаг 1 → Шаг 2 → ... → Итог → CTA",
         "prompt_suffix": "Формат: ПОШАГОВЫЙ ГАЙД. Дай чёткие шаги, которые родитель может сделать ПРЯМО СЕЙЧАС. Нумеруй: «Шаг 1», «Шаг 2» и т.д. Каждый шаг — конкретное действие.",
         "name": "ГАЙД",
     },
-    "💡 Лайфхак": {
+    "  Лайфхак": {
         "icon": "💡", "description": "Быстрый совет. Высокие шеры.",
         "structure": "Хук-проблема → Лайфхак → Как это работает → Результат → CTA",
         "prompt_suffix": "Формат: ЛАЙФХАК. Дай конкретный, практичный совет. «Сделай X вместо Y — и получишь Z».",
         "name": "ЛАЙФХАК",
     },
-    "🔥 Тренды / Новости": {
+    "  Тренды / Новости": {
         "icon": "🔥", "description": "Актуальная новость. Быстро набирает охваты.",
         "structure": "Новость → Почему это важно → Что делать → CTA",
         "prompt_suffix": "Формат: ТРЕНДЫ/НОВОСТИ. Начни с актуальной новости или тренда. Объясни, почему это важно именно для этой аудитории.",
         "name": "ТРЕНДЫ",
     },
-    "🍽️ Меню / Еда": {
+    "  Меню / Еда": {
         "icon": "🍽️", "description": "Меню, рецепты, питание. Самый сохраняемый контент.",
         "structure": "Хук-меню → День 1 → День 2 → ... → Советы → CTA",
         "prompt_suffix": "Формат: МЕНЮ/ПИТАНИЕ. Дай конкретное меню или рецепт, адаптированный для ребёнка с особенностями. Укажи питательные вещества.",
         "name": "МЕНЮ",
     },
-    "💬 История / Кейс": {
+    "  История / Кейс": {
         "icon": "💬", "description": "Реальная история. Высокие комментарии.",
         "structure": "Завязка → Развитие → Кульминация → Урок → CTA",
         "prompt_suffix": "Формат: ИСТОРИЯ/КЕЙС. Расскажи историю, с которой родитель себя узнает. Эмоциональная, но обнадёживающая.",
         "name": "ИСТОРИЯ",
     },
-    "📊 Факты / Статистика": {
+    "  Факты / Статистика": {
         "icon": "📊", "description": "Удивительные факты. Высокая шеряемость.",
         "structure": "Шокирующий факт → Контекст → Объяснение → CTA",
         "prompt_suffix": "Формат: ФАКТЫ/СТАТИСТИКА. Начни с удивительного факта или цифры, которая ломает стереотип. Объясни контекст.",
         "name": "ФАКТЫ",
     },
-    "✅ Чек-лист": {
+    "  Чек-лист": {
         "icon": "✅", "description": "Список для проверки. Максимальный save rate.",
         "structure": "Хук-чек-лист → Пункт 1 → Пункт 2 → ... → Бонус → CTA",
         "prompt_suffix": "Формат: ЧЕК-ЛИСТ. Дай конкретный список пунктов. Каждый пункт — конкретное действие.",
@@ -629,7 +629,7 @@ body{{font-family:'{font_name}',sans-serif;background:#1a1a1a;}}
 {slides_html}
 </div>
 <div id="export-controls">
-  <button id="download-zip-btn" onclick="downloadZip()">📦 Скачать ZIP с PNG ({full_w}×{full_h}px)</button>
+  <button id="download-zip-btn" onclick="downloadZip()"> Скачать ZIP с PNG ({full_w}×{full_h}px)</button>
   <div id="progress"></div>
 </div>
 <script>
@@ -668,7 +668,7 @@ async function downloadZip() {{
 
   if (errors === slides.length) {{
     btn.disabled = false;
-    btn.textContent = '📦 Скачать ZIP с PNG ({full_w}×{full_h}px)';
+    btn.textContent = ' Скачать ZIP с PNG ({full_w}×{full_h}px)';
     progress.textContent = '❌ Все слайды не удалось отрендерить. Попробуйте ещё раз.';
     return;
   }}
@@ -677,7 +677,7 @@ async function downloadZip() {{
   try {{
     var content = await zip.generateAsync({{type: 'blob'}});
     saveAs(content, 'carousel_slides.zip');
-    progress.textContent = '✅ Готово! ZIP скачан.' + (errors > 0 ? ' (' + errors + ' слайдов с ошибкой)' : '');
+    progress.textContent = ' Готово! ZIP скачан.' + (errors > 0 ? ' (' + errors + ' слайдов с ошибкой)' : '');
   }} catch (err) {{
     progress.textContent = '❌ Ошибка создания ZIP: ' + (err.message || err);
   }}
@@ -744,7 +744,7 @@ with st.sidebar:
     st.subheader("🎨 Бренд")
     brand_name = st.text_input("Название", value="Naturonata")
     handle = st.text_input("Instagram handle", value="@naturonata")
-    display_name = st.text_input("Отображаемое имя", value="Наталья Коршунова")
+    display_name = st.text_input("Отображаемое имя", value="Наталья")
     st.divider()
     st.subheader("🎨 Цвета")
     c1, c2 = st.columns(2)
@@ -761,21 +761,21 @@ with st.sidebar:
     st.subheader("🖼️ Модель картинок")
     flux_model = st.selectbox("FLUX модель", list(FLUX_MODELS.keys()), index=0)
     st.divider()
-    st.subheader("🏷️ Логотип и CTA-изображение")
+    st.subheader(" Логотип и CTA-изображение")
     st.caption("Логотип на **каждом слайде**, CTA-изображение — на **последнем**")
 
     # Логотип
-    logo_upload = st.file_uploader("🏷️ Логотип (PNG)", type=["png", "jpg", "jpeg", "webp"], key="logo_upload",
+    logo_upload = st.file_uploader(" Логотип (PNG)", type=["png", "jpg", "jpeg", "webp"], key="logo_upload",
         help="Загрузите логотип или будет использован дефолтный Naturonata")
-    use_default_logo = st.checkbox("✅ Использовать дефолтный логотип", value=True, key="use_default_logo")
+    use_default_logo = st.checkbox(" Использовать дефолтный логотип", value=True, key="use_default_logo")
 
     # CTA-изображение
-    cta_image_upload = st.file_uploader("🖼️ CTA-изображение (последний слайд)", type=["jpg", "jpeg", "png", "webp"], key="cta_image_upload",
+    cta_image_upload = st.file_uploader(" CTA-изображение (последний слайд)", type=["jpg", "jpeg", "png", "webp"], key="cta_image_upload",
         help="Загрузите изображение для последнего слайда или будет использовано дефолтное")
-    use_default_cta_image = st.checkbox("✅ Использовать дефолтное CTA-изображение", value=True, key="use_default_cta_image")
+    use_default_cta_image = st.checkbox(" Использовать дефолтное CTA-изображение", value=True, key="use_default_cta_image")
 
     st.divider()
-    st.subheader("👤 Фото профиля")
+    st.subheader(" Фото профиля")
     profile_photo = st.file_uploader("Загрузите фото", type=["jpg", "jpeg", "png", "webp"], key="profile_photo")
 
 # ── Определяем logo_b64 и cta_image_b64 ──
@@ -798,27 +798,27 @@ else:
 #  ОСНОВНАЯ ОБЛАСТЬ
 # ═════════════════════════════════════════════════════════════════════
 
-st.markdown('<h1 class="main-title">📸 Карусель Генератор</h1>', unsafe_allow_html=True)
+st.markdown('<h1 class="main-title"> Карусель Генератор</h1>', unsafe_allow_html=True)
 st.markdown('<p class="subtitle">Naturonata — карусели, которые останавливают скролл</p>', unsafe_allow_html=True)
 
 # ─── Шаг 1: Аудитория ────────────────────────────────────────────────
-st.markdown('<div class="step-header">1️⃣ Аудитория</div>', unsafe_allow_html=True)
+st.markdown('<div class="step-header">1️ Аудитория</div>', unsafe_allow_html=True)
 
 audience_choice = st.selectbox("Для кого эта карусель?", list(AUDIENCES.keys()), index=0)
 audience = AUDIENCES[audience_choice]
 
 st.markdown(f'<div class="audience-box">', unsafe_allow_html=True)
 st.markdown(f"**{audience.get('description', '')}**")
-if audience.get("pain_points"): st.markdown(f"💢 **Боли:** {audience['pain_points']}")
-if audience.get("desires"): st.markdown(f"✨ **Желания:** {audience['desires']}")
-if audience.get("stat"): st.markdown(f"📊 **Статистика:** {audience['stat']}")
-if audience.get("tone"): st.markdown(f"🗣️ **Тон:** {audience['tone']}")
+if audience.get("pain_points"): st.markdown(f" **Боли:** {audience['pain_points']}")
+if audience.get("desires"): st.markdown(f" **Желания:** {audience['desires']}")
+if audience.get("stat"): st.markdown(f" **Статистика:** {audience['stat']}")
+if audience.get("tone"): st.markdown(f" **Тон:** {audience['tone']}")
 st.markdown('</div>', unsafe_allow_html=True)
 
-custom_cta = st.text_input("✏️ Кастомный CTA (необязательно)", placeholder=audience.get("cta_text", ""))
+custom_cta = st.text_input(" Кастомный CTA (необязательно)", placeholder=audience.get("cta_text", ""))
 
 # ─── Шаг 2: Формат контента ──────────────────────────────────────────
-st.markdown('<div class="step-header">2️⃣ Формат контента</div>', unsafe_allow_html=True)
+st.markdown('<div class="step-header">2️ Формат контента</div>', unsafe_allow_html=True)
 
 fmt_cols = st.columns(4)
 selected_format = None
@@ -835,23 +835,23 @@ content_format = CONTENT_FORMATS[selected_format]
 st.markdown(f'<div class="audience-box"><strong>{selected_format}</strong><br>{content_format["description"]}<br><em>Структура: {content_format["structure"]}</em></div>', unsafe_allow_html=True)
 
 # ─── Шаг 3: Настройки ────────────────────────────────────────────────
-st.markdown('<div class="step-header">3️⃣ Настройки карусели</div>', unsafe_allow_html=True)
+st.markdown('<div class="step-header">3️ Настройки карусели</div>', unsafe_allow_html=True)
 
 c1, c2, c3 = st.columns(3)
 with c1: num_slides = st.slider("Количество слайдов", 3, 10, 7, 1)
 with c2: format_choice = st.selectbox("Формат", list(FORMATS.keys()), index=1); format_info = FORMATS[format_choice]
-with c3: ref_image = st.file_uploader("📸 Референс", type=["jpg", "jpeg", "png", "webp"], help="Загрузите пример дизайна карусели")
+with c3: ref_image = st.file_uploader(" Референс", type=["jpg", "jpeg", "png", "webp"], help="Загрузите пример дизайна карусели")
 
 # ─── Шаг 4: Контент ──────────────────────────────────────────────────
-st.markdown('<div class="step-header">4️⃣ Контент</div>', unsafe_allow_html=True)
+st.markdown('<div class="step-header">4️ Контент</div>', unsafe_allow_html=True)
 
-blog_post = st.text_area("📝 Вставьте текст статьи / поста / транскрипта", height=250,
+blog_post = st.text_area(" Вставьте текст статьи / поста / транскрипта", height=250,
     placeholder="Вставьте сюда текст, из которого нужно сделать карусель. GPT-4 превратит его в захватывающий сценарий для вашей аудитории.")
-focus = st.text_input("🎯 Фокус карусели", placeholder="Например: «Как расширить рацион ребёнка с РАС»")
+focus = st.text_input(" Фокус карусели", placeholder="Например: «Как расширить рацион ребёнка с РАС»")
 
 # ─── Шаг 5: Изображения ──────────────────────────────────────────────
-st.markdown('<div class="step-header">5️⃣ Изображения (опционально)</div>', unsafe_allow_html=True)
-generate_images = st.checkbox("🎨 Генерировать фоновые изображения", value=False)
+st.markdown('<div class="step-header">5 Изображения (опционально)</div>', unsafe_allow_html=True)
+generate_images = st.checkbox(" Генерировать фоновые изображения", value=False)
 image_prompt_template = ""
 selected_slides = []
 if generate_images:
@@ -864,13 +864,13 @@ if generate_images:
                 selected_slides.append(i)
 
 # ─── Шаг 6: Генерация ────────────────────────────────────────────────
-st.markdown('<div class="step-header">6️⃣ Генерация</div>', unsafe_allow_html=True)
+st.markdown('<div class="step-header">6️ Генерация</div>', unsafe_allow_html=True)
 
 gc1, gc2 = st.columns([1, 3])
-with gc1: generate_btn = st.button("🚀 Сгенерировать карусель", type="primary", use_container_width=True)
+with gc1: generate_btn = st.button(" Сгенерировать карусель", type="primary", use_container_width=True)
 with gc2:
-    if not openai_key: st.warning("⚠️ Введите OpenAI API Key")
-    if not blog_post: st.info("💡 Вставьте текст поста")
+    if not openai_key: st.warning(" Введите OpenAI API Key")
+    if not blog_post: st.info(" Вставьте текст поста")
 
 if generate_btn:
     if not openai_key: st.error("❌ Введите OpenAI API Key!")
@@ -880,16 +880,16 @@ if generate_btn:
 
         style_info = {}
         if ref_image and openai_key:
-            progress.progress(10, text="📸 Анализ референса...")
+            progress.progress(10, text=" Анализ референса...")
             try:
                 style_info = analyze_reference_image(image_to_base64(ref_image), openai_key)
                 st.session_state.style_info = style_info
-                st.success("✅ Референс проанализирован!")
+                st.success(" Референс проанализирован!")
                 if style_info:
-                    with st.expander("🎨 Извлечённый стиль"): st.json(style_info)
-            except Exception as e: st.warning(f"⚠️ Ошибка анализа референса: {e}")
+                    with st.expander(" Извлечённый стиль"): st.json(style_info)
+            except Exception as e: st.warning(f" Ошибка анализа референса: {e}")
 
-        progress.progress(30, text="✍️ GPT-4 создаёт сценарий...")
+        progress.progress(30, text=" GPT-4 создаёт сценарий...")
         try:
             slides_data = generate_carousel_content(
                 blog_post=blog_post, num_slides=num_slides, focus=focus or "Общая тема",
@@ -898,7 +898,7 @@ if generate_btn:
             )
             if not slides_data: st.stop()
             st.session_state.carousel_data = slides_data
-            st.success(f"✅ Сценарий готов: {len(slides_data)} слайдов!")
+            st.success(f" Сценарий готов: {len(slides_data)} слайдов!")
 
             with st.expander("📄 Сценарий"):
                 for i, slide in enumerate(slides_data):
@@ -911,17 +911,17 @@ if generate_btn:
 
         generated_images = {}
         if generate_images and fal_key and image_prompt_template and selected_slides:
-            progress.progress(50, text="🖼️ Генерация изображений...")
+            progress.progress(50, text=" Генерация изображений...")
             flux_model_id = FLUX_MODELS[flux_model]
             flux_size = format_info.get("flux_size", "square_hd")
             for idx, si in enumerate(selected_slides):
                 sh = slides_data[si].get("headline", "") if si < len(slides_data) else ""
                 prompt = f"{image_prompt_template}, theme: {sh}, no text, no letters, background only, abstract"
                 try:
-                    progress.progress(50 + int((idx / max(len(selected_slides), 1)) * 30), text=f"🖼️ Слайд {si+1}...")
+                    progress.progress(50 + int((idx / max(len(selected_slides), 1)) * 30), text=f" Слайд {si+1}...")
                     img_url = generate_flux_image(prompt=prompt, fal_key=fal_key, model=flux_model_id, image_size=flux_size)
-                    if img_url: generated_images[str(si)] = img_url; st.success(f"✅ Картинка для слайда {si+1}!")
-                except Exception as e: st.warning(f"⚠️ Слайд {si+1}: {e}")
+                    if img_url: generated_images[str(si)] = img_url; st.success(f" Картинка для слайда {si+1}!")
+                except Exception as e: st.warning(f" Слайд {si+1}: {e}")
             st.session_state.generated_images = generated_images
         elif generate_images and not fal_key: st.warning("⚠️ Введите fal.ai API Key!")
 
@@ -943,22 +943,22 @@ if generate_btn:
             html_path = os.path.join(tmp_dir, "carousel.html")
             with open(html_path, "w", encoding="utf-8") as f: f.write(carousel_html)
             st.session_state.html_path = html_path
-            progress.progress(100, text="✅ Готово!")
-            st.success("🎉 Карусель готова! Прокрутите вниз для превью и экспорта.")
+            progress.progress(100, text=" Готово!")
+            st.success(" Карусель готова! Прокрутите вниз для превью и экспорта.")
         except Exception as e: st.error(f"❌ Ошибка: {e}"); st.stop()
 
 
 # ─── Превью и экспорт ────────────────────────────────────────────────
 if st.session_state.carousel_html:
-    st.markdown('<div class="step-header">7️⃣ Превью</div>', unsafe_allow_html=True)
+    st.markdown('<div class="step-header">7️ Превью</div>', unsafe_allow_html=True)
     st.markdown('<div class="preview-container">', unsafe_allow_html=True)
     st.components.v1.html(st.session_state.carousel_html, height=format_info["preview_h"] + 100, scrolling=False)
     st.markdown('</div>', unsafe_allow_html=True)
 
-    st.markdown('<div class="step-header">8️⃣ Скачать слайды</div>', unsafe_allow_html=True)
+    st.markdown('<div class="step-header">8️ Скачать слайды</div>', unsafe_allow_html=True)
 
     # ── Способ 1: ZIP с PNG через клиентский рендер (html-to-image + jszip) ──
-    st.markdown("**📦 Скачать ZIP с PNG** (рендер прямо в браузере, работает на Streamlit Cloud)")
+    st.markdown("** Скачать ZIP с PNG** (рендер прямо в браузере, работает на Streamlit Cloud)")
     if st.session_state.carousel_data:
         zip_export_html = build_zip_export_html(
             slides_data=st.session_state.carousel_data,
@@ -983,17 +983,17 @@ if st.session_state.carousel_html:
 
     # ── Способ 2: PNG через Playwright (только локально) ──
     st.markdown("---")
-    st.markdown("**🖥️ PNG-экспорт через Playwright** (только при локальном запуске, выше качество)")
+    st.markdown("** PNG-экспорт через Playwright** (только при локальном запуске, выше качество)")
     if not _playwright_available:
         st.caption("⚠️ На Streamlit Cloud Playwright недоступен. Используйте кнопку «Скачать ZIP» выше.")
     
     ec1, ec2 = st.columns([1, 1])
-    with ec1: export_btn = st.button("📥 Экспортировать в PNG", type="primary", use_container_width=True, disabled=not _playwright_available)
+    with ec1: export_btn = st.button(" Экспортировать в PNG", type="primary", use_container_width=True, disabled=not _playwright_available)
     with ec2:
-        if st.session_state.exported_slides: st.info(f"✅ {len(st.session_state.exported_slides)} слайдов готовы")
+        if st.session_state.exported_slides: st.info(f" {len(st.session_state.exported_slides)} слайдов готовы")
 
     if export_btn and _playwright_available:
-        with st.spinner("🔄 Экспорт..."):
+        with st.spinner(" Экспорт..."):
             try:
                 html_path = st.session_state.get("html_path", "")
                 if not html_path or not os.path.exists(html_path):
@@ -1010,27 +1010,27 @@ if st.session_state.carousel_html:
                     preview_w=format_info["preview_w"], preview_h=format_info["preview_h"],
                 )
                 st.session_state.exported_slides = exported
-                st.success(f"✅ Экспортировано {len(exported)} слайдов ({format_info['w']}×{format_info['h']}px)!")
+                st.success(f" Экспортировано {len(exported)} слайдов ({format_info['w']}×{format_info['h']}px)!")
             except Exception as e: st.error(f"❌ Ошибка экспорта: {e}")
 
     if st.session_state.exported_slides:
-        st.subheader("📂 Слайды")
+        st.subheader(" Слайды")
         sc = st.columns(min(len(st.session_state.exported_slides), 5))
         for i, sp in enumerate(st.session_state.exported_slides):
             with sc[i % len(sc)]: st.image(sp, caption=f"Слайд {i+1}")
 
-        st.subheader("📥 Скачать")
+        st.subheader(" Скачать")
         dc = st.columns(min(len(st.session_state.exported_slides), 5))
         for i, sp in enumerate(st.session_state.exported_slides):
             with dc[i % len(dc)]:
                 with open(sp, "rb") as f:
-                    st.download_button(f"📥 Слайд {i+1}", f.read(), f"slide_{i+1:02d}.png", "image/png", key=f"dl_{i}")
+                    st.download_button(f" Слайд {i+1}", f.read(), f"slide_{i+1:02d}.png", "image/png", key=f"dl_{i}")
 
         zb = BytesIO()
         with zipfile.ZipFile(zb, "w", zipfile.ZIP_DEFLATED) as zf:
             for sp in st.session_state.exported_slides: zf.write(sp, os.path.basename(sp))
         zb.seek(0)
-        st.download_button("📦 Скачать все (ZIP)", zb.getvalue(), "carousel_slides.zip", "application/zip")
+        st.download_button(" Скачать все (ZIP)", zb.getvalue(), "carousel_slides.zip", "application/zip")
 
 st.divider()
-st.markdown("""<div style="text-align:center;color:#666;padding:2rem 0;"><p>📸 Naturonata Carousel Generator • GPT-4 + FLUX-2/Flash + Playwright</p></div>""", unsafe_allow_html=True)
+st.markdown("""<div style="text-align:center;color:#666;padding:2rem 0;"><p> Naturonata Carousel Generator • GPT-4 + FLUX-2/Flash + Playwright</p></div>""", unsafe_allow_html=True)
