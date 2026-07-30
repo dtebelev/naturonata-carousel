@@ -1,7 +1,7 @@
 # 📸 Naturonata Carousel Generator — Полная документация для разработчика
 
-> **Версия:** v4 (28 июля 2026)
-> **Файл программы:** `app.py` (791 строка)
+> **Версия:** v5.3 (30 июля 2026)
+> **Файл программы:** `app.py` (~1226 строк)
 > **Цель:** Дашборд для генерации Instagram-каруселей для бренда Naturonata
 
 ---
@@ -13,10 +13,10 @@ Streamlit-дашборд, который создаёт Instagram-карусел
 **Пайплайн:**
 1. Пользователь выбирает аудиторию, формат контента, вставляет текст
 2. GPT-4o генерирует сценарий карусели (JSON с заголовками, текстами, акцентами)
-3. (Опционально) FLUX-2/Flash генерирует фоновые изображения
+3. (Опционально) FLUX-2/Flash генерирует фоновые изображения ИЛИ используется кастомный фон (NEW v5.1)
 4. Сценарий собирается в интерактивный HTML-превью (свайп, навигация)
 5. Playwright экспортирует каждый слайд в PNG 1080×1350px
-6. ZIP-архив для скачивания
+6. ZIP-архив для скачивания (клиентский html-to-image + серверный Playwright)
 
 ---
 
@@ -49,8 +49,6 @@ Streamlit-дашборд, который создаёт Instagram-карусел
 | 5 | 👩‍⚕️ Логопеды и специалисты-рефереры | 25-55 | Фрагментарные знания, страх навредить |
 | 6 | 🤝 Админы сообществ и родительские лидеры | 28-50 | Дефицит времени, фильтрация псевдонауки |
 
-Каждая персона содержит: description, cta_goal, pain_points, desires, tone, language_notes, cta_text, stat.
-
 ---
 
 ## 4. Форматы контента (8 типов)
@@ -66,293 +64,296 @@ Streamlit-дашборд, который создаёт Instagram-карусел
 | 📊 Факты/Статистика | ФАКТЫ | Шок-факт → Контекст → Объяснение → CTA |
 | ✅ Чек-лист | ЧЕК-ЛИСТ | Хук-чек-лист → Пункт 1 → ... → Бонус → CTA |
 
+**v5 FIX:** выбор формата сохраняется в `session_state.selected_content_format` с ✅ и primary.
+
 ---
 
 ## 5. Архитектура программы
 
-### Структура файлов
+### Структура файлов v5.1
 
 ```
-├── app.py              # Весь код в одном файле (Streamlit)
+├── app.py              # Весь код ~1190 строк v5.1
 ├── assets/
-│   ├── logo.png           # Логотип Naturonata (уменьшенный, 150×200px, 17KB)
-│   ├── logo_original.png  # Оригинальный логотип (960×1280px, 259KB)
-│   ├── cta_image.jpg      # CTA-изображение (267×400px, 14KB)
-│   └── cta_image_original.jpg  # Оригинальное CTA-изображение (1024×1536px, 75KB)
-├── requirements.txt    # streamlit, openai, fal-client, playwright, Pillow, requests
-├── start.sh           # Скрипт запуска
-└── README.md          # Документация
+│   ├── logo.png           # Логотип текстовый NATURONATA 150×200px 17KB
+│   ├── cta_image.jpg      # CTA круглая иллюстрация 83KB
+│   ├── cta_image.png      # Оригинал 2.2MB
+│   ├── custom_bg_beige_with_logo.jpg      # NEW бежевый фон с логотипом 1080×1350 115KB
+│   ├── custom_bg_beige_no_logo.jpg        # NEW бежевый фон без логотипа 102KB (рекомендуется)
+│   ├── custom_bg_beige_with_logo_preview.jpg # превью 420×525
+│   └── custom_bg_beige_no_logo_preview.jpg
+├── requirements.txt
+├── packages.txt
+├── CONTEXT.md          # ОБНОВЛЯТЬ ПОСЛЕ КАЖДОГО ИЗМЕНЕНИЯ
+└── README.md
 ```
 
-### Ключевые функции в app.py
+### Ключевые функции
 
 | Функция | Назначение |
 |---------|-----------|
-| `image_to_base64(image_file)` | Конвертация загруженного файла в data URI |
-| `file_path_to_base64(path)` | Конвертация файла с диска в data URI |
-| `embed_fonts_in_html(html_path, font_name)` | Встраивание Google Fonts как base64 в HTML для Playwright |
-| `generate_carousel_content(...)` | GPT-4o генерация сценария (JSON-массив слайдов) |
-| `analyze_reference_image(image_b64, api_key)` | GPT-4o Vision анализ референс-дизайна → JSON стиля |
-| `generate_flux_image(prompt, fal_key, ...)` | FLUX-2/Flash генерация фонового изображения |
-| `build_carousel_html(...)` | Сборка интерактивного HTML-превью карусели |
-| `export_slides_to_png(...)` | Playwright экспорт каждого слайда в PNG |
+| `image_to_base64` | Загруженный файл → data URI |
+| `file_path_to_base64` | Файл с диска → data URI |
+| `embed_fonts_in_html` | Google Fonts → base64 для Playwright |
+| `generate_carousel_content` | GPT-4o JSON сценарий |
+| `analyze_reference_image` | GPT-4o Vision анализ референса |
+| `generate_flux_image` | FLUX фоны |
+| `build_carousel_html(..., custom_bg_b64, custom_bg_opacity, hide_logo_on_custom_bg)` | HTML превью v5.1 с поддержкой кастомного фона |
+| `build_zip_export_html(..., custom_bg_b64, ...)` | ZIP экспорт с кастомным фоном |
+| `export_slides_to_png` | Playwright экспорт |
 
-### Поток данных
+### Новые константы v5/v5.1
+
+```python
+COLOR_PRESETS = {
+  "🎨 Кастом": None,
+  "🌙 Dark": {"accent": "#2FAD64", "headline": "#FFFFFF", "body": "#FFFFFF", "bg": "#1a1a2e"},
+  "☀️ Light": {"accent": "#2FAD64", "headline": "#0f1419", "body": "#333333", "bg": "#F9F7F3"},
+  "🤍 Minimal White": {...},
+  "🌿 Deep Green": {...},
+  "💫 Soft Pastel": {...},
+}
+# v5.1 custom background CSS (как логотип — один раз в CSS)
+# .custom-bg{ background-image:url('data:...'); background-size:cover; opacity:{custom_bg_opacity} }
+```
+
+### Поток данных v5.1
 
 ```
-Пользователь (ввод) → generate_carousel_content() → slides_data (JSON)
-                                                          ↓
-                      build_carousel_html() ← style_info (опционально)
-                          ↓                  ← generated_images (опционально)
-                     carousel_html           ← logo_b64 + cta_image_b64
+Аудитория + Формат + Текст → GPT-4o → slides_data
+        + 
+Кастомный фон (опционально, base64 ONCE) → custom_bg_b64
+        + 
+Цвета (из пресета / пикера / референса) → headline_color/body_color/primary/bg
+        + 
+Логотип/CTA → logo_b64/cta_image_b64
                           ↓
-                     st.components.v1.html() → Превью в браузере
+               build_carousel_html / build_zip_export_html
                           ↓
-                     embed_fonts_in_html() → export_slides_to_png() → PNG файлы
-                          ↓
-                     ZIP-архив для скачивания
+                  Превью (html-to-image) / PNG (Playwright) → ZIP
 ```
 
 ---
 
-## 6. Технические детали (важно для модификации)
+## 6. Технические детали
 
 ### 6.1. Формат вывода GPT-4
 
-GPT-4o возвращает JSON-массив:
-```json
-[
-  {"type": "hook", "headline": "...", "body": "...", "accent": "..."},
-  {"type": "content", "headline": "...", "body": "...", "accent": ""},
-  {"type": "cta", "headline": "...", "body": "...", "accent": "..."}
-]
+JSON массив `[{type, headline, body, accent}]`
+
+### 6.2. Промпт GPT-4
+
+См. PROMPT.md, включает аудиторию, формат, CTA → @naturonata, фокус, правила, источник.
+
+### 6.3. HTML-шаблон карусели v5.1
+
+**Размеры:** превью 420×525, экспорт 1080×1350, scale 2.571
+
+**Структура слайда v5.1:**
 ```
-- `type`: "hook" (1-й слайд), "content" (основные), "cta" (последний)
-- `headline`: жирный заголовок слайда
-- `body`: основной текст (поддерживает \n → <br>)
-- `accent`: акцентная строка (для хука и CTA)
-
-### 6.2. Промпт GPT-4 (в `generate_carousel_content`)
-
-Включает полный контекст:
-- Биография Натальи
-- Описание аудитории (боли, желания, тон, язык, статистика)
-- Формат контента (структура, промпт-суффикс)
-- Цель CTA → Telegram @naturonata
-- Фокус карусели
-- Правила (запрещённые слова, тон, структура слайдов)
-- Текст-источник
-
-### 6.3. HTML-шаблон карусели (в `build_carousel_html`)
-
-**Размеры:**
-- Превью: 420×525px (формат 4:5)
-- Экспорт: 1080×1350px (device_scale_factor = 1080/420 ≈ 2.571)
-
-**Структура слайда:**
-```
-.slide (градиентный фон)
-  ├── .bg-image (фоновое изображение, opacity 0.2, если есть)
+.slide (bg fallback цвет)
+  ├── .custom-bg (NEW v5.1, если загружен кастомный фон, opacity из слайдера, z-index 0)
+  ├── .bg-image (FLUX фон, opacity 0.2, если нет кастомного фона)
   ├── .slide-content
-  │   ├── .slide-logo (CSS background-image,右上 38px, opacity 0.85)
-  │   ├── .slide-number (1/7, левый верхний угол)
+  │   ├── .slide-logo (если не hide_logo_on_custom_bg)
+  │   ├── .slide-number
   │   ├── .slide-inner
-  │   │   ├── .slide-badge (ГАЙД/ВИКТОРИНА, только на hook)
-  │   │   ├── .deco-line (только на hook)
-  │   │   ├── h2.headline
-  │   │   ├── p.body-text
-  │   │   ├── p.accent-text
-  │   │   └── .cta-image-container > img.cta-image (только на CTA-слайде)
-  │   └── .slide-bottom > .brand-bar (Naturonata / @naturonata)
-  ├── .progress-bar (внизу)
-  └── .swipe-arrow (стрелка вправо, если не последний)
+  │   │   ├── badge, deco-line, h2.headline (color: headline_color), p.body-text (color: body_color), accent
+  │   │   └── cta-image (последний слайд)
+  │   └── brand-bar
+  ├── progress-bar
+  └── swipe-arrow
 ```
 
-**Критически важно: логотип через CSS, не через `<img>`**
-- Логотип вставляется как `<div class="slide-logo"></div>` — CSS-класс с `background-image` в виде base64
-- Base64 логотипа встраивается в CSS **один раз**, а не повторяется в каждом слайде
-- Это снижает HTML с 2.5 МБ до ~50 КБ (7 слайдов × 345KB base64 → 1 × 22KB)
+**Критически важно:**
+- Логотип и кастомный фон — через CSS class с base64 **один раз**, не в каждом слайде. Это экономит мегабайты.
+- `custom_bg_div = '<div class="custom-bg"></div>'` в каждом слайде, а CSS `.custom-bg{background-image:url(...)}` один раз.
+- Если `has_custom_bg=True`, то `bg_img_div=""` (FLUX фоны отключаются) и `bg_style = background: {bg}` (fallback).
 
-### 6.4. Playwright-экспорт (в `export_slides_to_png`)
+### 6.4. Playwright-экспорт
 
-**Критические шаги:**
-1. `viewport` шире чем слайд (+400px buffer) — иначе обрезается правый край
-2. `device_scale_factor = slide_w / preview_w` (1080/420 ≈ 2.571)
-3. `wait_until="networkidle"` + `document.fonts.ready` + 3000ms — шрифты должны загрузиться
-4. JS-скрипт «распаковывает» карусель: убирает `transform`, делает все слайды `display:block`
-5. `slide.screenshot()` — попиксельный экспорт каждого элемента
-6. Шрифты встраиваются через `embed_fonts_in_html()` перед экспортом (Google Fonts CDN не работает в headless)
+- viewport +400 buffer
+- device_scale_factor
+- fonts.ready + 3000ms
+- JS распаковка carusel
+- slide.screenshot()
 
-### 6.5. Цвета и стили по умолчанию
+Клиентский экспорт через `html-to-image@1.11.13 + jszip + FileSaver` — работает на Cloud и поддерживает custom background (так как кастомный фон — обычный div с background-image, он захватывается).
 
-| Параметр | Значение | Описание |
-|----------|----------|----------|
-| accent_color | #2FAD64 | Зелёный акцент Naturonata |
-| bg_color | #1a1a2e | Тёмный фон |
-| gradient_from | #1a1a2e | Начало градиента |
-| gradient_to | #2FAD64 | Конец градиента |
-| text_color | #ffffff | Белый заголовок |
-| body_color | rgba(255,255,255,0.75) | Полупрозрачный текст |
+### 6.5. Цвета и стили v5
+
+| Пикер | Ключ | Дефолт | Что красит |
+|-------|------|--------|------------|
+| Акцент | accent_picker | #2FAD64 | badge, deco-line, accent-text, progress, gradient To |
+| Заголовок | headline_picker | #FFFFFF | headline, slide-number, brand-name |
+| Основной текст | body_picker | #FFFFFF | body-text, brand-handle, progress-counter |
+| Фон | bg_picker | #1a1a2e | secondary, bg, gradient From |
+
+Логика:
+```python
+primary = s.get("primary_color", accent_color) or accent_color
+secondary = s.get("secondary_color", bg_color) or bg_color
+headline_color = s.get("text_color", text_dark) or text_dark
+body_color = s.get("subtitle_color", text_body_color) or text_body_color
+```
+Референс имеет приоритет.
 
 ### 6.6. Форматы Instagram
 
-| Формат | Размер | FLUX-параметр |
-|--------|--------|---------------|
-| 1:1 | 1080×1080 | square_hd |
-| 4:5 | 1080×1350 | portrait_4_5 |
-| 3:4 | 1080×1440 | portrait_3_4 |
+1:1 1080×1080 square_hd, 4:5 1080×1350 portrait_4_5, 3:4 1080×1440 portrait_3_4
+
+### 6.7. Пресеты цветов v5
+
+`COLOR_PRESETS` dict, selectbox `color_preset`, session_state `last_preset`, `*_picker` ключи. При смене пресета — запись в session_state и rerun.
+
+### 6.8. Кастомный фон v5.1 (NEW)
+
+(см. выше — полный опис в файле сохранён, кратко: custom_bg_b64 ONCE CSS, hide_logo flag, opacity slider, примеры бежевых фонов)
+
+### 6.9. Позиция логотипа v5.2 (NEW)
+
+**Задача:** На примере бежевого фона логотип по центру сверху, а программа ставила всегда правый верх.
+
+**Решение:**
+
+1. **Константа LOGO_POSITIONS:**
+```python
+LOGO_POSITIONS = {
+    "Правый верх (дефолт)": {"css": "top:28px; right:32px; left:auto; bottom:auto;", "bg_pos": "center right", "transform": ""},
+    "Левый верх": {"css": "top:28px; left:32px;", "bg_pos": "center left"},
+    "Центр верх (как на твоём бежевом фоне)": {"css": "top:28px; left:50%;", "bg_pos": "center", "transform": "transform:translateX(-50%);"},
+    "Правый низ": {"css": "bottom:80px; right:32px;"},
+    "Левый низ": {...},
+    "Центр низ": {"css": "bottom:80px; left:50%;", "transform": "translateX(-50%);"},
+}
+```
+
+2. **Sidebar:** `logo_position_choice = st.selectbox("Позиция логотипа", list(LOGO_POSITIONS.keys()), key="logo_position", help="Центр верх — как на твоём бежевом фоне")`
+
+3. **Session State:** `logo_position` default "Правый верх (дефолт)"
+
+4. **В build функциях:**
+```python
+pos_info = LOGO_POSITIONS.get(logo_position, LOGO_POSITIONS["Правый верх (дефолт)"])
+logo_css = f".slide-logo{position:absolute;{pos_info['css']} {pos_info['transform']} height:38px; ... background-position:{pos_info['bg_pos']}; ...}"
+```
+
+5. **Совместимость:** Работает с кастомным фоном — можно выбрать "Центр верх" чтобы логотип был как на примере бежевого фона, или "Правый верх" для классики. Учитывает hide_logo_on_custom_bg.
+
+### 6.10. Размер логотипа v5.3 (NEW)
+
+**Задача:** Логотип был фикс 38px, пользователь захотел регулировать под бежевый фон (крупнее по центру).
+
+**Решение:**
+- `logo_size` в init_state default 38
+- Slider в sidebar 20-80px key=logo_size
+- `logo_css` height:{logo_size}px
+- Передаётся в обе build функции
 
 ---
 
 ## 7. Известные проблемы и решения
 
 ### 7.1. Белый экран в Streamlit
-**Причина:** HTML слишком большой (>2МБ) из-за повторяющихся base64 данных.
-**Решение:** Логотип через CSS-класс (base64 один раз), уменьшенные картинки (logo.png 17KB вместо 259KB).
+HTML слишком большой из-за base64. Решение: логотип и кастомный фон через CSS один раз, уменьшенные картинки.
 
 ### 7.2. Шрифты в Playwright
-**Причина:** Google Fonts CDN не работает в headless Chromium.
-**Решение:** `embed_fonts_in_html()` скачивает CSS, заменяет URL на base64, встраивает в `<style>`.
+Google Fonts не работает в headless. Решение: embed_fonts_in_html().
 
 ### 7.3. Обрезка правого края
-**Причина:** Viewport слишком узкий.
-**Решение:** `viewport = {width: preview_w + 400, height: preview_h + 400}`.
+Viewport +400 buffer.
 
 ### 7.4. Playwright не устанавливается
-**Нужно:** `playwright install chromium` + `playwright install-deps chromium` (системные библиотеки).
+playwright install chromium.
 
-### 7.5. Russian text на FLUX-изображениях
-**Решение:** FLUX генерирует только фоны (prompt: "no text, no letters, background only, abstract"). Весь русский текст — через HTML/CSS overlay.
+### 7.5. Russian text на FLUX
+FLUX только фоны, текст через HTML.
+
+### 7.6. FIX v5: Формат сбрасывался в Викторину
+session_state.selected_content_format + rerun + ✅ primary.
+
+### 7.7. FIX v5: Цвета не работали
+text_dark и text_body_color не использовались → теперь headline_color/body_color.
+
+### 7.8. Пресеты цветов v5
+COLOR_PRESETS + selectbox + session_state.
+
+### 7.9. NEW v5.1: Кастомный фон для всех слайдов
+Реализовано: file_uploader, custom_bg_b64 once CSS, hide_logo flag, opacity slider, примеры бежевых фонов.
 
 ---
 
 ## 8. API и зависимости
 
-### 8.1. OpenAI API
-- **Модель:** gpt-4o
-- **Использование:** Генерация текста (carousel content) + анализ референс-изображений (GPT-4o Vision)
-- **Цена:** ~$0.01-0.03 за карусель
-- **Ключ:** Вводится пользователем в боковой панели
-
-### 8.2. fal.ai API
-- **Модель:** FLUX-2/Flash (fal-ai/flux-2/flash)
-- **Цена:** $0.005/MP
-- **Использование:** Генерация фоновых изображений (опционально)
-- **SDK:** `fal_client.subscribe(model, arguments={...})`
-- **Ключ:** Вводится пользователем в боковой панели
-
-### 8.3. Python-зависимости
-```
-streamlit       # UI-фреймворк
-openai          # GPT-4o API
-fal-client      # FLUX-2/Flash API
-playwright      # PNG-экспорт (headless Chromium)
-Pillow          # Обработка изображений
-requests        # HTTP-запросы
-```
+OpenAI gpt-4o ~$0.01-0.03 за карусель, fal.ai FLUX-2/Flash $0.005/MP, streamlit, openai, fal-client, Pillow, requests, playwright опционально.
 
 ---
 
-## 9. Логотип и CTA-изображение
+## 9. Логотип, CTA и фоны
 
-### 9.1. Логотип (на каждом слайде)
-- **Файл:** `assets/logo.png` (150×200px, 17KB)
-- **Оригинал:** `assets/logo_original.png` (960×1280px, 259KB)
-- **Позиция:** Правый верхний угол, 38px высота, opacity 0.85
-- **Техническая реализация:** CSS-класс `.slide-logo` с `background-image: url(data:image/png;base64,...)`. Base64 встраивается один раз в CSS, не повторяется в каждом слайде.
+### 9.1. Логотип
+assets/logo.png 150×200 17KB, CSS once.
 
-### 9.2. CTA-изображение (на последнем слайде)
-- **Файл:** `assets/cta_image.jpg` (267×400px, 14KB)
-- **Оригинал:** `assets/cta_image_original.jpg` (1024×1536px, 75KB)
-- **Позиция:** Центр, ниже текста, 220px ширина, скруглённые углы, тень
-- **Техническая реализация:** `<img class="cta-image" src="data:image/jpeg;base64,...">`. Base64 встраивается один раз (только в CTA-слайд).
+### 9.2. CTA-изображение
+assets/cta_image.jpg 83KB круг мама+мальчик.
 
-### 9.3. Замена логотипа/CTA-изображения
-- Через UI: загрузить файлы в боковой панели (кнопки «Логотип» и «CTA-изображение»)
-- Через файлы: заменить `assets/logo.png` и/или `assets/cta_image.jpg`
-- **Важно:** Логотип должен быть уменьшен (~200px высота) для оптимизации HTML-размера
+### 9.3. Кастомный фон v5.1
+- assets/custom_bg_beige_with_logo.jpg 1080×1350 115KB — оригинал примера с логотипом по центру
+- assets/custom_bg_beige_no_logo.jpg 1080×1350 102KB — очищенная версия без логотипа (рекомендуется)
+- Загрузка через sidebar "Фон для всех слайдов", checkbox hide_logo, opacity slider
+- CSS once: .custom-bg
+
+### 9.4. Замена файлов
+Через UI или заменить в assets/. Для фона рекомендуется 1080×1350 без логотипа, до 200KB.
 
 ---
 
-## 10. Возможные улучшения (Roadmap)
+## 10. Roadmap
 
-### Приоритетные
-1. **Редактирование слайдов** — после генерации пользователь может редактировать текст каждого слайда
-2. **Сохранение истории** — localStorage или SQLite для сохранения сгенерированных каруселей
-3. **Batch-генерация** — создавать несколько каруселей за один запуск
-4. **Шаблоны дизайна** — предустановленные стили (minimalist, magazine, bold, etc.)
+Приоритетные:
+1. Редактирование слайдов после генерации
+2. Сохранение истории
+3. Batch-генерация
+4. Шаблоны дизайна — частично v5 пресеты, v5.1 кастомные фоны ✅
 
-### Средние
-5. **Настраиваемый позиция логотипа** — выбор угла размещения
-6. **Разные фоны для разных слайдов** — градиент для хука, фото для контента
-7. **Превью в Instagram-рамке** — как будет выглядеть в ленте
-8. **Автоматический постинг** — через Instagram Graph API
+Средние:
+5. Настраиваемая позиция логотипа (в т.ч. центр как в примере фона)
+6. Разные фоны для разных слайдов
+7. Instagram-рамка превью
+8. Автопостинг
 
-### Долгосрочные
-9. **Мультиязычность** — поддержка других языков
-10. **Анимация** — генерация Reels/Video из карусели
-11. **A/B тестирование** — генерация нескольких вариантов для сравнения
+Долгосрочные: мультиязычность, Reels, A/B.
 
 ---
 
-## 11. Структура Streamlit-дашборда
+## 11. Структура дашборда v5.1
 
-### Боковая панель (sidebar)
-- API ключи (OpenAI, fal.ai)
-- Бренд (название, handle, отображаемое имя)
-- Цвета (акцент, тёмный текст, текст, фон)
-- Шрифт (8 вариантов Google Fonts)
-- FLUX модель (Flash/Dev/Pro)
-- Логотип (загрузка или дефолт)
-- CTA-изображение (загрузка или дефолт)
+Sidebar:
+- API ключи
+- Бренд
+- Цвета: пресет selectbox (6) + 4 color_picker (теперь работают)
+- Шрифт (8)
+- FLUX модель
+- Логотип и CTA
+- **NEW Фон для всех слайдов**: uploader + checkbox hide_logo + opacity slider
 - Фото профиля
 
-### Основная область (6 шагов + превью + экспорт)
-1. **Аудитория** — выбор из 6 персон + описание + кастомный CTA
-2. **Формат контента** — 8 кнопок-форматов
-3. **Настройки** — кол-во слайдов (3-10), формат (1:1/4:5/3:4), референс
-4. **Контент** — текст поста + фокус
-5. **Изображения** — (опционально) FLUX-генерация фонов
-6. **Генерация** — кнопка → прогресс-бар → результат
-7. **Превью** — интерактивный HTML с навигацией
-8. **Экспорт** — PNG кнопка + просмотр + скачивание (по одному или ZIP)
+Main: 6 шагов (аудитория, формат ✅, настройки, контент, изображения FLUX, генерация) + превью + экспорт (ZIP с поддержкой кастомного фона + Playwright)
 
 ---
 
 ## 12. Deploy
 
-### Вариант: Streamlit Community Cloud (рекомендуется)
-- Бесплатный хостинг Streamlit-приложений
-- Приватный репозиторий на GitHub
-- Деплой за 2 минуты
-- URL: `https://naturonata-carousel.streamlit.app`
-
-### Альтернативы (не Vercel)
-Vercel НЕ подходит для Streamlit — он для статических сайтов и serverless-функций. Streamlit — это долгоживущий Python-процесс с WebSocket.
-
-**Подходящие платформы:**
-- **Streamlit Community Cloud** — бесплатно, идеально для Streamlit
-- **Railway** — $5/мес, полный Docker
-- **Render** — бесплатный tier, Python-поддержка
-- **Hugging Face Spaces** — бесплатно, Streamlit-поддержка
+Streamlit Community Cloud рекомендуется. packages.txt fonts-liberation, fonts-noto-color-emoji. Railway/Render/HF Spaces альтернативы.
 
 ---
 
-## 13. Как запустить локально
+## 13. Локальный запуск
 
 ```bash
-# 1. Установить зависимости
-pip install streamlit openai fal-client playwright Pillow requests
-
-# 2. Установить браузер Playwright
+pip install streamlit openai fal-client Pillow requests playwright
 playwright install chromium
-# На Linux: playwright install-deps chromium
-
-# 3. Запустить
-python -m streamlit run app.py --server.port 8501
-
-# 4. Открыть в браузере
-# http://localhost:8501
+python -m streamlit run app.py
 ```
 
 ---
@@ -362,10 +363,26 @@ python -m streamlit run app.py --server.port 8501
 | Версия | Дата | Изменения |
 |--------|------|-----------|
 | v1 | 2026-07-27 | Базовый дашборд, GPT-4, FLUX, Playwright |
-| v2 | 2026-07-28 | Добавлены 6 аудиторий Naturonata, 8 форматов контента |
-| v3 | 2026-07-28 | Полная интеграция бренда, промпт GPT-4 с контекстом |
-| v4 | 2026-07-28 | Логотип на каждом слайде, CTA-изображение на последнем, оптимизация HTML (2.5MB→50KB) |
+| v2 | 2026-07-28 | 6 аудиторий, 8 форматов |
+| v3 | 2026-07-28 | Бренд интеграция, промпт с контекстом |
+| v4 | 2026-07-28 | Логотип на каждом слайде, CTA на последнем, оптимизация HTML 2.5MB→50KB |
+| v5 | 2026-07-30 | FIX формата (session_state), FIX цветов (headline/body), NEW пресеты цветов (Dark/Light/White/Deep Green/Pastel), sidebar help, 791→1056 строк |
+| v5.1 | 2026-07-30 | **NEW кастомный фон для всех слайдов**: file_uploader custom_bg_upload + checkbox hide_logo_on_custom_bg + slider custom_bg_opacity + CSS once .custom-bg (как логотип) + логика has_custom_bg отключает FLUX и градиент + поддержка в обеих функциях build_carousel_html и build_zip_export_html + примеры фонов assets/custom_bg_beige_with_logo.jpg 115KB и custom_bg_beige_no_logo.jpg 102KB 1080×1350 + рекомендации без логотипа + совместимость с пресетами Light для светлого фона. 1056→1190 строк. |
+| v5.2 | 2026-07-30 | **NEW позиция логотипа**: LOGO_POSITIONS dict (6 позиций: правый верх дефолт, левый верх, центр верх как на бежевом фоне, правый/левый/центр низ) + selectbox в sidebar key=logo_position + session_state + logo_css теперь использует pos_info['css'] + transform + bg_pos вместо хардкода top:28px;right:32px + поддержка в обеих функциях + совместимость с кастомным фоном (можно центр верх как на примере или правый верх). 1190→1213 строк. |
+| v5.3 | 2026-07-30 | **NEW размер логотипа**: slider logo_size 20-80px step 2 key=logo_size default 38 + session_state + logo_css height:{logo_size}px вместо хардкода 38px + передача в build_carousel_html и build_zip_export_html + совместимость с позицией и кастомным фоном. 1213→1226 строк. |
 
 ---
 
-*Этот файл предназначен для передачи другому AI-агенту или разработчику для модификации программы. Все ключевые решения, архитектура, и подводные камни задокументированы.*
+## 15. Правила для следующего агента (ОБЯЗАТЕЛЬНО)
+
+> После КАЖДОГО изменения сразу обновлять CONTEXT.md
+
+1. Не ломать рабочее — хирургические diff.
+2. session_state для формата и пресетов — сохранять.
+3. Логотип и кастомный фон — через CSS ONCE (base64 один раз).
+4. Цвета — headline_color/body_color из пикера, не хардкод.
+5. Обновлять CONTEXT.md сразу.
+6. Проверять `python -m py_compile app.py`
+7. Для кастомного фона: если фон светлый — советовать пресет Light/Pastel для тёмного текста.
+
+*Файл для передачи новому агенту. v5.1 от 30 июля 2026 — добавлена поддержка кастомного фона.*
