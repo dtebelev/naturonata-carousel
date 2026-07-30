@@ -507,6 +507,189 @@ body{{font-family:'{font_name}',sans-serif;background:#0a0a0a;display:flex;flex-
     return html
 
 
+def build_zip_export_html(slides_data, format_info, brand_name, handle, display_name,
+                          accent_color, text_dark, text_body_color, bg_color, font_name,
+                          font_url, style_info=None, generated_images=None,
+                          profile_photo_b64="", content_format_name="",
+                          logo_b64="", cta_image_b64=""):
+    """
+    HTML-компонент для клиентского рендера слайдов в PNG и сборки в ZIP.
+    Использует html-to-image + jszip + FileSaver.js прямо в браузере.
+    Слайды рендерятся в скрытом контейнере (preview-размер), захватываются
+    через html-to-image с pixelRatio для получения полного разрешения.
+    """
+    total = len(slides_data)
+    pw, ph = format_info["preview_w"], format_info["preview_h"]
+    full_w, full_h = format_info["w"], format_info["h"]
+    pixel_ratio = round(full_w / pw, 4)
+
+    s = style_info or {}
+    primary = s.get("primary_color", accent_color)
+    secondary = s.get("secondary_color", "#1a1a2e")
+    bg = s.get("background_color", bg_color)
+    gradient_from = s.get("gradient_from", secondary)
+    gradient_to = s.get("gradient_to", primary)
+    has_gradient = s.get("has_gradient", True)
+    number_pos = s.get("number_position", "top-left")
+    images = generated_images or {}
+
+    # ── HTML слайдов (без навигации, просто стопка) ──
+    slides_html = ""
+    for i, slide in enumerate(slides_data):
+        sn = i + 1
+        stype = slide.get("type", "content")
+        headline = slide.get("headline", "")
+        body = slide.get("body", "").replace("\n", "<br>")
+        accent = slide.get("accent", "")
+        is_hook = stype == "hook"
+        is_cta = stype == "cta"
+
+        bg_style = f"background: linear-gradient(135deg, {gradient_from} 0%, {gradient_to} 100%);" if has_gradient else f"background: {bg};"
+        bg_img_div = f'<div class="bg-image" style="background-image:url(\'{images.get(str(i), "")}\');"></div>' if images.get(str(i), "") else ""
+
+        num_pos = {"top-left": "top:28px; left:32px;", "top-right": "top:28px; right:32px;",
+                    "bottom-left": "bottom:76px; left:32px;", "bottom-right": "bottom:76px; right:32px;",
+                    "center": "top:28px; left:50%; transform:translateX(-50%);"}
+        num_css = num_pos.get(number_pos, num_pos["top-left"])
+
+        if is_hook: hs, hw, hlh, bs = "32px", "900", "1.15", "17px"; badge = f'<div class="slide-badge">{content_format_name or "КАРУСЕЛЬ"}</div>'
+        elif is_cta: hs, hw, hlh, bs = "28px", "800", "1.2", "16px"; badge = ""
+        else: hs, hw, hlh, bs = "24px", "700", "1.25", "15px"; badge = ""
+
+        deco = f'<div class="deco-line" style="background:{primary};"></div>' if is_hook else ""
+        pct = ((i + 1) / total) * 100
+        acc_html = f'<p class="accent-text">{accent}</p>' if accent else ""
+
+        logo_html = '<div class="slide-logo"></div>' if logo_b64 else ""
+
+        cta_img_html = ""
+        if is_cta and cta_image_b64:
+            cta_img_html = f'<div class="cta-image-container"><img class="cta-image" src="{cta_image_b64}" alt="Naturonata CTA"></div>'
+
+        inner_class = "slide-inner cta-inner" if is_cta else "slide-inner"
+
+        slides_html += f"""
+        <div class="slide" data-index="{i}">
+            {bg_img_div}
+            <div class="slide-content">
+                {logo_html}
+                <div class="slide-number" style="{num_css}">{sn}<span class="slide-total">/{total}</span></div>
+                <div class="{inner_class}">{badge}{deco}<h2 class="headline" style="font-size:{hs};font-weight:{hw};line-height:{hlh};">{headline}</h2><p class="body-text" style="font-size:{bs};">{body}</p>{acc_html}{cta_img_html}</div>
+                <div class="slide-bottom"><div class="brand-bar"><span class="brand-name">{brand_name}</span><span class="brand-handle">{handle}</span></div></div>
+            </div>
+            <div class="progress-bar"><div class="progress-track"><div class="progress-fill" style="width:{pct}%;"></div></div><span class="progress-counter">{sn}/{total}</span></div>
+        </div>"""
+
+    # ── Logo CSS ──
+    logo_css = ""
+    if logo_b64:
+        logo_css = f".slide-logo{{position:absolute;top:28px;right:32px;height:38px;width:auto;object-fit:contain;z-index:3;opacity:0.85;background-image:url('{logo_b64}');background-size:contain;background-repeat:no-repeat;background-position:center right;min-width:60px;}}"
+
+    html = f"""<!DOCTYPE html><html lang="ru"><head><meta charset="UTF-8">
+<script src="https://cdn.jsdelivr.net/npm/html-to-image@1.11.13/dist/html-to-image.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/file-saver@2.0.5/dist/FileSaver.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family={font_url}&display=swap" rel="stylesheet">
+<style>
+@import url('https://fonts.googleapis.com/css2?family={font_url}&display=swap');
+*{{margin:0;padding:0;box-sizing:border-box;}}
+body{{font-family:'{font_name}',sans-serif;background:#1a1a1a;}}
+#slides-container{{position:fixed;top:0;left:0;z-index:-1;opacity:0;pointer-events:none;}}
+.slide{{width:{pw}px;height:{ph}px;position:relative;overflow:hidden;{bg_style}display:flex;flex-direction:column;}}
+.bg-image{{position:absolute;top:0;left:0;width:100%;height:100%;background-size:cover;background-position:center;opacity:0.2;z-index:0;}}
+.slide-content{{position:relative;z-index:1;display:flex;flex-direction:column;height:100%;padding:0 36px 80px 36px;justify-content:center;}}
+.slide-number{{position:absolute;font-size:14px;font-weight:700;color:rgba(255,255,255,0.5);letter-spacing:1px;z-index:2;}}
+.slide-total{{color:rgba(255,255,255,0.25);}}
+.slide-inner{{display:flex;flex-direction:column;gap:14px;}}
+.slide-badge{{display:inline-block;background:{primary};color:#fff;font-size:10px;font-weight:800;padding:5px 16px;border-radius:20px;letter-spacing:2px;text-transform:uppercase;width:fit-content;}}
+.deco-line{{width:48px;height:4px;border-radius:2px;}}
+.headline{{color:#ffffff;letter-spacing:-0.5px;max-width:92%;}}
+.body-text{{line-height:1.65;color:rgba(255,255,255,0.75);max-width:88%;}}
+.accent-text{{font-size:15px;font-weight:700;color:{primary};margin-top:2px;}}
+.slide-bottom{{position:absolute;bottom:64px;left:36px;right:36px;}}
+.brand-bar{{display:flex;align-items:center;gap:10px;}}
+.brand-name{{font-size:13px;font-weight:700;color:rgba(255,255,255,0.6);}}
+.brand-handle{{font-size:12px;color:rgba(255,255,255,0.3);}}
+.progress-bar{{position:absolute;bottom:0;left:0;right:0;padding:14px 28px 18px;display:flex;align-items:center;gap:12px;z-index:10;}}
+.progress-track{{flex:1;height:3px;background:rgba(255,255,255,0.12);border-radius:3px;overflow:hidden;}}
+.progress-fill{{height:100%;background:{primary};border-radius:3px;}}
+.progress-counter{{font-size:11px;font-weight:600;color:rgba(255,255,255,0.3);min-width:30px;text-align:right;}}
+{logo_css}
+.cta-inner{{gap:12px;}}
+.cta-image-container{{display:flex;justify-content:center;margin-top:8px;}}
+.cta-image{{width:220px;height:auto;max-height:200px;object-fit:contain;border-radius:16px;box-shadow:0 8px 32px rgba(0,0,0,0.3);}}
+#export-controls{{text-align:center;padding:20px;}}
+#download-zip-btn{{background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);color:#fff;border:none;font-weight:700;font-size:1.1rem;padding:14px 36px;border-radius:12px;cursor:pointer;transition:opacity 0.2s;}}
+#download-zip-btn:hover{{opacity:0.9;}}
+#download-zip-btn:disabled{{opacity:0.5;cursor:not-allowed;}}
+#progress{{color:#aaa;margin-top:10px;font-size:14px;min-height:20px;}}
+</style>
+</head><body>
+<div id="slides-container">
+{slides_html}
+</div>
+<div id="export-controls">
+  <button id="download-zip-btn" onclick="downloadZip()">📦 Скачать ZIP с PNG ({full_w}×{full_h}px)</button>
+  <div id="progress"></div>
+</div>
+<script>
+async function downloadZip() {{
+  var btn = document.getElementById('download-zip-btn');
+  var progress = document.getElementById('progress');
+  btn.disabled = true;
+  btn.textContent = '⏳ Генерация PNG...';
+  progress.textContent = 'Загрузка шрифтов...';
+
+  // Ждём загрузки шрифтов
+  try {{ await document.fonts.ready; }} catch(e) {{}}
+
+  var zip = new JSZip();
+  var slides = document.querySelectorAll('#slides-container .slide');
+  var pixelRatio = {pixel_ratio};
+  var errors = 0;
+
+  for (var i = 0; i < slides.length; i++) {{
+    progress.textContent = 'Рендер слайда ' + (i+1) + ' из ' + slides.length + '...';
+    try {{
+      var dataUrl = await htmlToImage.toPng(slides[i], {{
+        pixelRatio: pixelRatio,
+        quality: 1.0,
+        backgroundColor: null,
+      }});
+      var base64Data = dataUrl.split(',')[1];
+      var name = 'slide_' + String(i+1).padStart(2, '0') + '.png';
+      zip.file(name, base64Data, {{base64: true}});
+    }} catch (err) {{
+      console.error('Error slide ' + (i+1) + ':', err);
+      errors++;
+      progress.textContent = '⚠️ Ошибка на слайде ' + (i+1) + ': ' + (err.message || err);
+    }}
+  }}
+
+  if (errors === slides.length) {{
+    btn.disabled = false;
+    btn.textContent = '📦 Скачать ZIP с PNG ({full_w}×{full_h}px)';
+    progress.textContent = '❌ Все слайды не удалось отрендерить. Попробуйте ещё раз.';
+    return;
+  }}
+
+  progress.textContent = 'Создание ZIP...';
+  try {{
+    var content = await zip.generateAsync({{type: 'blob'}});
+    saveAs(content, 'carousel_slides.zip');
+    progress.textContent = '✅ Готово! ZIP скачан.' + (errors > 0 ? ' (' + errors + ' слайдов с ошибкой)' : '');
+  }} catch (err) {{
+    progress.textContent = '❌ Ошибка создания ZIP: ' + (err.message || err);
+  }}
+
+  btn.disabled = false;
+  btn.textContent = '📦 Скачать ZIP с PNG ({full_w}×{full_h}px)';
+}}
+</script>
+</body></html>"""
+    return html
+
+
 async def export_slides_to_png(html_path, output_dir, total_slides, slide_w, slide_h, preview_w, preview_h):
     from playwright.async_api import async_playwright
     out = Path(output_dir); out.mkdir(parents=True, exist_ok=True)
@@ -774,19 +957,35 @@ if st.session_state.carousel_html:
 
     st.markdown('<div class="step-header">8️⃣ Скачать слайды</div>', unsafe_allow_html=True)
 
-    # ── Кнопка: скачать HTML-файл карусели ──
-    st.markdown("**Способ 1: Скачать HTML-файл** (откройте в браузере и сделайте скриншоты)")
-    st.download_button(
-        "📥 Скачать carousel.html", 
-        st.session_state.carousel_html.encode("utf-8"), 
-        "carousel.html", "text/html",
-        help="Скачайте HTML-файл, откройте в браузере и делайте скриншоты каждого слайда"
-    )
+    # ── Способ 1: ZIP с PNG через клиентский рендер (html-to-image + jszip) ──
+    st.markdown("**📦 Скачать ZIP с PNG** (рендер прямо в браузере, работает на Streamlit Cloud)")
+    if st.session_state.carousel_data:
+        zip_export_html = build_zip_export_html(
+            slides_data=st.session_state.carousel_data,
+            format_info=format_info,
+            brand_name=brand_name,
+            handle=handle,
+            display_name=display_name,
+            accent_color=accent_color,
+            text_dark=text_dark,
+            text_body_color=text_body_color,
+            bg_color=bg_color,
+            font_name=font_choice,
+            font_url=FONTS[font_choice],
+            style_info=st.session_state.get("style_info"),
+            generated_images=st.session_state.get("generated_images", {}),
+            profile_photo_b64=image_to_base64(profile_photo) if profile_photo else "",
+            content_format_name=content_format.get("name", ""),
+            logo_b64=logo_b64,
+            cta_image_b64=cta_image_b64,
+        )
+        st.components.v1.html(zip_export_html, height=120, scrolling=False)
 
-    # ── Кнопка: скачать PNG через Playwright (только локально) ──
-    st.markdown("**Способ 2: PNG-экспорт** (работает только при локальном запуске)")
+    # ── Способ 2: PNG через Playwright (только локально) ──
+    st.markdown("---")
+    st.markdown("**🖥️ PNG-экспорт через Playwright** (только при локальном запуске, выше качество)")
     if not _playwright_available:
-        st.caption("⚠️ На Streamlit Cloud PNG-экспорт недоступен. Для PNG запустите программу на своём компьютере.")
+        st.caption("⚠️ На Streamlit Cloud Playwright недоступен. Используйте кнопку «Скачать ZIP» выше.")
     
     ec1, ec2 = st.columns([1, 1])
     with ec1: export_btn = st.button("📥 Экспортировать в PNG", type="primary", use_container_width=True, disabled=not _playwright_available)
