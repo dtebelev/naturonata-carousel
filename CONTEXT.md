@@ -1,7 +1,7 @@
 # 📸 Naturonata Carousel Generator — Полная документация для разработчика
 
-> **Версия:** v5.3 (30 июля 2026)
-> **Файл программы:** `app.py` (~1226 строк)
+> **Версия:** v5.5 (30 июля 2026)
+> **Файл программы:** `app.py` (~1389 строк)
 > **Цель:** Дашборд для генерации Instagram-каруселей для бренда Naturonata
 
 ---
@@ -250,6 +250,106 @@ logo_css = f".slide-logo{position:absolute;{pos_info['css']} {pos_info['transfor
 - `logo_css` height:{logo_size}px
 - Передаётся в обе build функции
 
+### 6.11. Кастомный CTA v5.4 (FIX)
+
+**Проблема:** Смешивалось "Напиши приз" + "подпишись на @naturonata".
+
+**Решение:** Условный cta_block с has_custom_cta флагом, инструкция "ТОЧНО этот текст, одно действие за раз".
+
+### 6.12. Размер логотипа v5.3 (NEW)
+
+Slider 20-80px, key logo_size, height:{logo_size}px.
+
+ Кастомный CTA v5.4 (FIX)
+
+**Проблема:** Пользователь вводит в поле "Кастомный CTA" текст "Напиши в комментарии слово «приз»", а на последнем слайде программа генерирует "Напиши в комментарии слово «приз» и подпишись на @naturonata в телеграмм" — смешивает два действия.
+
+**Причина:** В промпте GPT было всегда:
+
+```
+Последний слайд должен вести к: {aud_cta}
+Важно: CTA должен вести в Telegram-канал @naturonata
+```
+
+Где `aud_cta = custom_cta or audience_default`. GPT видел и кастомный текст, и инструкцию про Telegram, и соединял их.
+
+**Решение v5.4:**
+
+```python
+has_custom_cta = bool(custom_cta and custom_cta.strip())
+if has_custom_cta:
+    cta_block = " ... Используй ТОЧНО этот текст ... НЕ добавляй Telegram ... Одно действие за раз ..."
+else:
+    cta_block = " ... должен вести в Telegram @naturonata ..."
+```
+
+Теперь если кастомный CTA задан — GPT получает жёсткую инструкцию приоритета №1 не добавлять ничего лишнего.
+
+### 6.12. Редактирование слайдов live v5.5 (NEW)
+
+**Задача:** Пользователь хочет менять текст каждой карточки после генерации.
+
+**Решение (безопасно и красиво):**
+
+1. **Session State:**
+- `carousel_data` — текущий (редактируемый) массив
+- `carousel_data_original` — бекап оригинала GPT-4o для сброса
+- `edit_headline_i`, `edit_body_i`, `edit_accent_i`, `edit_type_i` — поля ввода для слайда i
+
+2. **При генерации:**
+```python
+st.session_state.carousel_data = [dict(s) for s in slides_data]
+st.session_state.carousel_data_original = [dict(s) for s in slides_data]
+for k in list(st.session_state.keys()):
+    if k.startswith("edit_"): del st.session_state[k]
+```
+
+3. **UI блок 6.5 (между генерацией и превью):**
+- `st.markdown("6.5 ✏️ Редактировать")`
+- Инициализация ключей если нет
+- Кнопки "Сбросить к оригиналу" и "Очистить акценты"
+- Цикл `for i in range(len(carousel_data)):` → `st.expander(f"Слайд {i+1} [{type}] — {headline[:40]}")`
+  - `selectbox type: hook/content/cta`
+  - `text_input accent`
+  - `text_input headline` + счётчик >80 симв warning
+  - `text_area body` height 140 + счётчик >300 info
+
+4. **Live-обновление без кнопки:**
+```python
+new_data = []
+has_changes = False
+for i in range(len(carousel_data)):
+    new_slide = {
+      "type": session_state[f"edit_type_{i}"],
+      "headline": session_state[f"edit_headline_{i}"],
+      "body": session_state[f"edit_body_{i}"],
+      "accent": session_state[f"edit_accent_{i}"],
+    }
+    if new_slide != old: has_changes=True
+    new_data.append(new_slide)
+
+if has_changes:
+    session_state.carousel_data = new_data
+    rebuilt_html = build_carousel_html(slides_data=new_data, format_info=..., logo_position=..., logo_size=..., custom_bg_b64=..., ...)
+    session_state.carousel_html = rebuilt_html
+    # обновить html_path для Playwright
+```
+
+5. **Безопасность:**
+- Редактируется только текст, не структура HTML/CSS
+- `type` ограничен списком ["hook","content","cta"] — нельзя ввести произвольное
+- Пустой headline/body разрешён, но можно добавить валидацию
+- Сброс к оригиналу одной кнопкой
+- При новой генерации старые edit_ ключи удаляются — нет конфликтов
+
+6. **Красота и удобство:**
+- Expanders: первый открыт, остальные закрыты
+- Заголовок expander показывает тип и первые 40 символов заголовка — быстро ориентироваться
+- Счётчики символов с warning
+- Кнопки управления сверху
+- Превью ниже автоматически обновляется — сразу видишь результат
+- Работает с кастомным фоном, позицией и размером логотипа, цветами, FLUX
+
 ---
 
 ## 7. Известные проблемы и решения
@@ -370,6 +470,8 @@ python -m streamlit run app.py
 | v5.1 | 2026-07-30 | **NEW кастомный фон для всех слайдов**: file_uploader custom_bg_upload + checkbox hide_logo_on_custom_bg + slider custom_bg_opacity + CSS once .custom-bg (как логотип) + логика has_custom_bg отключает FLUX и градиент + поддержка в обеих функциях build_carousel_html и build_zip_export_html + примеры фонов assets/custom_bg_beige_with_logo.jpg 115KB и custom_bg_beige_no_logo.jpg 102KB 1080×1350 + рекомендации без логотипа + совместимость с пресетами Light для светлого фона. 1056→1190 строк. |
 | v5.2 | 2026-07-30 | **NEW позиция логотипа**: LOGO_POSITIONS dict (6 позиций: правый верх дефолт, левый верх, центр верх как на бежевом фоне, правый/левый/центр низ) + selectbox в sidebar key=logo_position + session_state + logo_css теперь использует pos_info['css'] + transform + bg_pos вместо хардкода top:28px;right:32px + поддержка в обеих функциях + совместимость с кастомным фоном (можно центр верх как на примере или правый верх). 1190→1213 строк. |
 | v5.3 | 2026-07-30 | **NEW размер логотипа**: slider logo_size 20-80px step 2 key=logo_size default 38 + session_state + logo_css height:{logo_size}px вместо хардкода 38px + передача в build_carousel_html и build_zip_export_html + совместимость с позицией и кастомным фоном. 1213→1226 строк. |
+| v5.4 | 2026-07-30 | **FIX кастомный CTA**: если пользователь вводит кастомный CTA "Напиши в комментарии слово «приз»", то раньше GPT добавлял "и подпишись на @naturonata". Теперь логика: has_custom_cta = bool(custom_cta.strip()), если True — cta_block с приоритетом №1 "Используй ТОЧНО этот текст, НЕ добавляй Telegram", с критическим правилом "Одно действие за раз". Если кастомного нет — старый блок с Telegram. Исправлено в generate_carousel_content. 1226→1243 строк. |
+| v5.5 | 2026-07-30 | **NEW редактирование слайдов live**: блок 6.5 ✏️ Редактировать слайды — expanders для каждого слайда с полями headline, body, accent, type (hook/content/cta). Live-обновление без кнопки: сравнение new_data vs old, пересборка build_carousel_html и build_zip_export_html с текущими цветами/фоном/лого. Session_state: carousel_data_original (бекап GPT), edit_headline_i, edit_body_i, edit_accent_i, edit_type_i. Кнопки "↩️ Сбросить к оригиналу" и "🧹 Очистить акценты". Безопасно: только текст, дизайн не ломается, счётчики символов. 1243→1389 строк. |
 
 ---
 
