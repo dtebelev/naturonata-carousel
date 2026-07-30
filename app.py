@@ -216,7 +216,7 @@ CONTENT_FORMATS = {
 # ─── Session State ────────────────────────────────────────────────────
 def init_state():
     defaults = {
-        "carousel_html": None, "carousel_data": None, "slides_generated": False,
+        "carousel_html": None, "carousel_data": None, "carousel_data_original": None, "slides_generated": False,
         "exported_slides": [], "generated_images": {}, "style_info": None, "html_path": None,
         "selected_content_format": list(CONTENT_FORMATS.keys())[0],
         # v5: пресеты цветов + сохранение пикера
@@ -307,7 +307,10 @@ def generate_carousel_content(blog_post: str, num_slides: int, focus: str,
     client = OpenAI(api_key=api_key)
 
     aud_desc = audience.get("description", "")
-    aud_cta = custom_cta or audience.get("cta_text", audience.get("cta_goal", ""))
+    # v5.4 FIX: если задан кастомный CTA — используем ТОЛЬКО его, не добавляем Telegram
+    has_custom_cta = bool(custom_cta and custom_cta.strip())
+    aud_cta_default = audience.get("cta_text", audience.get("cta_goal", ""))
+    aud_cta = custom_cta if has_custom_cta else aud_cta_default
     aud_pain = audience.get("pain_points", "")
     aud_desires = audience.get("desires", "")
     aud_tone = audience.get("tone", "")
@@ -317,6 +320,23 @@ def generate_carousel_content(blog_post: str, num_slides: int, focus: str,
     fmt_name = content_format.get("name", "Карусель")
     fmt_structure = content_format.get("structure", "")
     fmt_prompt = content_format.get("prompt_suffix", "")
+
+    # v5.4: отдельный блок CTA в зависимости от кастомного
+    if has_custom_cta:
+        cta_block = f"""═══ ЦЕЛЬ CTA (КАСТОМНЫЙ — ПРИОРИТЕТ №1) ═══
+Пользователь вручную задал CTA и хочет ИМЕННО его. Используй ТОЧНО этот текст для последнего слайда.
+НЕ добавляй ничего про Telegram, подписку, @naturonata или консультации, если этого нет в его тексте.
+
+Точный текст CTA от пользователя: {custom_cta}
+
+КРИТИЧЕСКОЕ ПРАВИЛО: Не смешивай два действия. Если пользователь написал "Напиши в комментарии слово «приз»" — напиши ТОЛЬКО "Напиши в комментарии слово «приз»", а НЕ "Напиши в комментарии слово «приз» и подпишись на @naturonata". Одно действие за раз.
+"""
+    else:
+        cta_block = f"""═══ ЦЕЛЬ CTA ═══
+Последний слайд должен вести к: {aud_cta}
+CTA должен быть мягким, не агрессивным. Не «купите», а «подпишись» или «переходи».
+Важно: CTA должен вести в Telegram-канал @naturonata, НЕ на консультации.
+"""
 
     content_prompt = f"""Ты — профессиональный SMM-копирайтер для Instagram-аккаунта Naturonata (@naturonata). Создай сценарий карусели из {num_slides} слайдов.
 
@@ -337,10 +357,7 @@ def generate_carousel_content(blog_post: str, num_slides: int, focus: str,
 Структура: {fmt_structure}
 {fmt_prompt}
 
-═══ ЦЕЛЬ CTA ═══
-Последний слайд должен вести к: {aud_cta}
-CTA должен быть мягким, не агрессивным. Не «купите», а «подпишись» или «переходи».
-Важно: CTA должен вести в Telegram-канал @naturonata, НЕ на консультации.
+{cta_block}
 
 ═══ ФОКУС ═══
 {focus}
@@ -1077,8 +1094,13 @@ if generate_btn:
                 custom_cta=custom_cta,
             )
             if not slides_data: st.stop()
-            st.session_state.carousel_data = slides_data
-            st.success(f" Сценарий готов: {len(slides_data)} слайдов!")
+            st.session_state.carousel_data = [dict(s) for s in slides_data]
+            st.session_state.carousel_data_original = [dict(s) for s in slides_data]
+            # Очищаем старые ключи редактирования, чтобы не оставались от прошлой карусели
+            for k in list(st.session_state.keys()):
+                if k.startswith("edit_"):
+                    del st.session_state[k]
+            st.success(f" Сценарий готов: {len(slides_data)} слайдов! Теперь можно редактировать каждый слайд ниже.")
 
             with st.expander("📄 Сценарий"):
                 for i, slide in enumerate(slides_data):
@@ -1131,6 +1153,147 @@ if generate_btn:
             progress.progress(100, text=" Готово!")
             st.success(" Карусель готова! Прокрутите вниз для превью и экспорта.")
         except Exception as e: st.error(f"❌ Ошибка: {e}"); st.stop()
+
+
+
+# ─── v5.5: Редактирование слайдов (live, expanders) ──────────────────────────
+if st.session_state.get("carousel_data"):
+    st.markdown('<div class="step-header">6.5 ✏️ Редактировать слайды (live)</div>', unsafe_allow_html=True)
+    st.caption("Меняй заголовок, текст, акцент и тип каждого слайда — превью обновляется мгновенно. Безопасно: только текст, дизайн не ломается.")
+
+    # Инициализация ключей редактирования из текущих данных (если их ещё нет)
+    for i, slide in enumerate(st.session_state.carousel_data):
+        if f"edit_headline_{i}" not in st.session_state:
+            st.session_state[f"edit_headline_{i}"] = slide.get("headline", "")
+        if f"edit_body_{i}" not in st.session_state:
+            st.session_state[f"edit_body_{i}"] = slide.get("body", "")
+        if f"edit_accent_{i}" not in st.session_state:
+            st.session_state[f"edit_accent_{i}"] = slide.get("accent", "")
+        if f"edit_type_{i}" not in st.session_state:
+            st.session_state[f"edit_type_{i}"] = slide.get("type", "content")
+
+    # Кнопки управления
+    ec1, ec2, ec3 = st.columns([1,1,2])
+    with ec1:
+        if st.button("↩️ Сбросить к оригиналу GPT", key="reset_edits", help="Вернуть текст как сгенерировал GPT-4o"):
+            if st.session_state.get("carousel_data_original"):
+                # Восстанавливаем из оригинала
+                orig = st.session_state.carousel_data_original
+                st.session_state.carousel_data = [dict(s) for s in orig]
+                for i, slide in enumerate(orig):
+                    st.session_state[f"edit_headline_{i}"] = slide.get("headline", "")
+                    st.session_state[f"edit_body_{i}"] = slide.get("body", "")
+                    st.session_state[f"edit_accent_{i}"] = slide.get("accent", "")
+                    st.session_state[f"edit_type_{i}"] = slide.get("type", "content")
+                st.success("Сброшено к оригиналу")
+                st.rerun()
+    with ec2:
+        if st.button("🧹 Очистить все акценты", key="clear_accents", help="Удалить все акцентные строки"):
+            for i in range(len(st.session_state.carousel_data)):
+                st.session_state[f"edit_accent_{i}"] = ""
+            st.rerun()
+
+    # Рендер expanders
+    for i in range(len(st.session_state.carousel_data)):
+        # Безопасный заголовок для expander
+        cur_head = st.session_state.get(f"edit_headline_{i}", "")[:40] or f"Слайд {i+1}"
+        cur_type = st.session_state.get(f"edit_type_{i}", "content")
+        with st.expander(f"📝 Слайд {i+1} [{cur_type}] — {cur_head}...", expanded=(i==0)):
+            c1, c2 = st.columns([1, 1])
+            with c1:
+                st.selectbox(
+                    "Тип слайда",
+                    ["hook", "content", "cta"],
+                    key=f"edit_type_{i}",
+                    help="hook = первый (хук), cta = последний (призыв), content = остальные. Можно менять, но лучше оставить 1 hook и 1 cta."
+                )
+            with c2:
+                st.text_input(
+                    "Акцент (для hook и cta)",
+                    key=f"edit_accent_{i}",
+                    placeholder="Акцентная строка, напр. '72% детей...'",
+                    help="Пусто для content слайдов"
+                )
+            st.text_input(
+                f"Заголовок",
+                key=f"edit_headline_{i}",
+                placeholder="Жирный заголовок слайда",
+                help="40-60 символов ideal для Instagram"
+            )
+            # Счётчик символов
+            hl_len = len(st.session_state.get(f"edit_headline_{i}", ""))
+            if hl_len > 80:
+                st.warning(f"⚠️ Заголовок длинный ({hl_len} симв.) — может не влезть на слайд, сократи до 60")
+            
+            st.text_area(
+                f"Основной текст",
+                key=f"edit_body_{i}",
+                height=140,
+                placeholder="2-3 строки, поддерживает перенос \n → <br>",
+                help="Для списков используй → или •\n → автоматически станет <br>"
+            )
+            body_len = len(st.session_state.get(f"edit_body_{i}", ""))
+            if body_len > 300:
+                st.info(f"ℹ️ Текст длинный ({body_len} симв.) — на слайде может быть мелко")
+
+    # После рендера — проверяем изменилось ли что-то vs carousel_data (live update)
+    new_data = []
+    has_changes = False
+    for i in range(len(st.session_state.carousel_data)):
+        old = st.session_state.carousel_data[i]
+        new_slide = {
+            "type": st.session_state.get(f"edit_type_{i}", old.get("type", "content")),
+            "headline": st.session_state.get(f"edit_headline_{i}", old.get("headline", "")),
+            "body": st.session_state.get(f"edit_body_{i}", old.get("body", "")),
+            "accent": st.session_state.get(f"edit_accent_{i}", old.get("accent", "")),
+        }
+        if new_slide != old:
+            has_changes = True
+        new_data.append(new_slide)
+
+    if has_changes:
+        st.session_state.carousel_data = new_data
+        # Пересборка HTML с текущими настройками дизайна (цвета, фон, лого)
+        try:
+            # Используем переменные из основного скоупа (format_info, brand_name и т.д.)
+            # Они определены выше в каждом rerun
+            rebuilt_html = build_carousel_html(
+                slides_data=new_data,
+                format_info=format_info,
+                brand_name=brand_name,
+                handle=handle,
+                display_name=display_name,
+                accent_color=accent_color,
+                text_dark=text_dark,
+                text_body_color=text_body_color,
+                bg_color=bg_color,
+                font_name=font_choice,
+                font_url=FONTS[font_choice],
+                style_info=st.session_state.get("style_info"),
+                generated_images=st.session_state.get("generated_images", {}),
+                profile_photo_b64=image_to_base64(profile_photo) if 'profile_photo' in globals() and profile_photo else "",
+                content_format_name=content_format.get("name", "") if 'content_format' in globals() else "",
+                logo_b64=logo_b64 if 'logo_b64' in globals() else "",
+                cta_image_b64=cta_image_b64 if 'cta_image_b64' in globals() else "",
+                custom_bg_b64=custom_bg_b64 if 'custom_bg_b64' in globals() else "",
+                custom_bg_opacity=st.session_state.get("custom_bg_opacity", 1.0),
+                hide_logo_on_custom_bg=st.session_state.get("hide_logo_custom_bg", False),
+                logo_position=st.session_state.get("logo_position", "Правый верх (дефолт)"),
+                logo_size=st.session_state.get("logo_size", 38),
+            )
+            st.session_state.carousel_html = rebuilt_html
+            # Обновляем html_path для Playwright экспорта
+            import os, tempfile
+            from pathlib import Path
+            tmp_dir = tempfile.mkdtemp()
+            html_path = os.path.join(tmp_dir, "carousel.html")
+            with open(html_path, "w", encoding="utf-8") as f:
+                f.write(rebuilt_html)
+            st.session_state.html_path = html_path
+        except Exception as e:
+            st.error(f"❌ Ошибка пересборки превью: {e}")
+
+    st.divider()
 
 
 # ─── Превью и экспорт ────────────────────────────────────────────────
