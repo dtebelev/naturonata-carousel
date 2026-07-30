@@ -74,6 +74,26 @@ FLUX_MODELS = {
     "FLUX-2/Pro (макс. качество)": "fal-ai/flux-2-pro",
 }
 
+# ── FIX v5: пресеты цветов (тёмный/светлый и т.д.) ──
+COLOR_PRESETS = {
+    "🎨 Кастом (свои цвета)": None,
+    "🌙 Naturonata Dark (дефолт)": {"accent": "#2FAD64", "headline": "#FFFFFF", "body": "#FFFFFF", "bg": "#1a1a2e"},
+    "☀️ Naturonata Light": {"accent": "#2FAD64", "headline": "#0f1419", "body": "#333333", "bg": "#F9F7F3"},
+    "🤍 Minimal White": {"accent": "#2FAD64", "headline": "#0f1419", "body": "#4a4a4a", "bg": "#FFFFFF"},
+    "🌿 Deep Green": {"accent": "#A8E063", "headline": "#FFFFFF", "body": "#D8EED8", "bg": "#102418"},
+    "💫 Soft Pastel": {"accent": "#7BC67E", "headline": "#2d2a26", "body": "#5a5754", "bg": "#FDF6EC"},
+}
+
+# ── NEW v5.2: позиции логотипа (для фона как на примере — центр верх) ──
+LOGO_POSITIONS = {
+    "Правый верх (дефолт)": {"css": "top:28px; right:32px; left:auto; bottom:auto;", "bg_pos": "center right", "transform": ""},
+    "Левый верх": {"css": "top:28px; left:32px; right:auto; bottom:auto;", "bg_pos": "center left", "transform": ""},
+    "Центр верх (как на твоём бежевом фоне)": {"css": "top:28px; left:50%; right:auto; bottom:auto;", "bg_pos": "center", "transform": "transform:translateX(-50%);"},
+    "Правый низ": {"css": "bottom:80px; right:32px; left:auto; top:auto;", "bg_pos": "center right", "transform": ""},
+    "Левый низ": {"css": "bottom:80px; left:32px; right:auto; top:auto;", "bg_pos": "center left", "transform": ""},
+    "Центр низ": {"css": "bottom:80px; left:50%; right:auto; top:auto;", "bg_pos": "center", "transform": "transform:translateX(-50%);"},
+}
+
 # ═════════════════════════════════════════════════════════════════════
 #  🧠 АУДИТОРИИ NATURONATA
 # ═════════════════════════════════════════════════════════════════════
@@ -198,6 +218,17 @@ def init_state():
     defaults = {
         "carousel_html": None, "carousel_data": None, "slides_generated": False,
         "exported_slides": [], "generated_images": {}, "style_info": None, "html_path": None,
+        "selected_content_format": list(CONTENT_FORMATS.keys())[0],
+        # v5: пресеты цветов + сохранение пикера
+        "color_preset": "🌙 Naturonata Dark (дефолт)",
+        "last_preset": None,
+        "accent_picker": "#2FAD64",
+        "headline_picker": "#FFFFFF",
+        "body_picker": "#FFFFFF",
+        "bg_picker": "#1a1a2e",
+        # v5.2: позиция логотипа
+        "logo_position": "Правый верх (дефолт)",
+        "logo_size": 38,
     }
     for k, v in defaults.items():
         if k not in st.session_state:
@@ -395,20 +426,27 @@ def generate_flux_image(prompt: str, fal_key: str, model: str = "fal-ai/flux-2/f
 def build_carousel_html(slides_data, format_info, brand_name, handle, display_name, accent_color,
                          text_dark, text_body_color, bg_color, font_name, font_url, style_info=None,
                          generated_images=None, profile_photo_b64="", content_format_name="",
-                         logo_b64="", cta_image_b64=""):
+                         logo_b64="", cta_image_b64="", custom_bg_b64="", custom_bg_opacity=1.0,
+                         hide_logo_on_custom_bg=False, logo_position="Правый верх (дефолт)", logo_size=38):
     total = len(slides_data)
     pw, ph = format_info["preview_w"], format_info["preview_h"]
     s = style_info or {}
-    primary = s.get("primary_color", accent_color)
-    secondary = s.get("secondary_color", "#1a1a2e")
-    bg = s.get("background_color", bg_color)
-    gradient_from = s.get("gradient_from", secondary)
-    gradient_to = s.get("gradient_to", primary)
+    # FIX: цвета фона и текста теперь реально работают (раньше были захардкожены #ffffff)
+    primary = s.get("primary_color", accent_color) or accent_color
+    secondary = s.get("secondary_color", bg_color) or bg_color
+    bg = s.get("background_color", bg_color) or bg_color
+    gradient_from = s.get("gradient_from", secondary) or secondary
+    gradient_to = s.get("gradient_to", primary) or primary
     has_gradient = s.get("has_gradient", True)
     number_pos = s.get("number_position", "top-left")
     images = generated_images or {}
+    # Текстовые цвета: если есть референс — берём из него, иначе из сайдбара
+    headline_color = s.get("text_color", text_dark) or text_dark or "#ffffff"
+    body_color = s.get("subtitle_color", text_body_color) or text_body_color or "rgba(255,255,255,0.85)"
 
     slides_html = ""
+    # v5.1: custom background для всех слайдов (один раз в CSS, как логотип)
+    has_custom_bg = bool(custom_bg_b64)
     for i, slide in enumerate(slides_data):
         sn = i + 1
         stype = slide.get("type", "content")
@@ -418,8 +456,16 @@ def build_carousel_html(slides_data, format_info, brand_name, handle, display_na
         is_hook = stype == "hook"
         is_cta = stype == "cta"
 
-        bg_style = f"background: linear-gradient(135deg, {gradient_from} 0%, {gradient_to} 100%);" if has_gradient else f"background: {bg};"
-        bg_img_div = f'<div class="bg-image" style="background-image:url(\'{images.get(str(i), "")}\');"></div>' if images.get(str(i), "") else ""
+        # Если есть кастомный фон — он главный, градиент отключаем (или оставляем как fallback)
+        if has_custom_bg:
+            bg_style = f"background: {bg};"  # fallback цвет, сам фон — в .custom-bg div
+            # FLUX фоны отключаем, когда есть кастомный фон для всех слайдов
+            bg_img_div = ""
+            custom_bg_div = '<div class="custom-bg"></div>'
+        else:
+            bg_style = f"background: linear-gradient(135deg, {gradient_from} 0%, {gradient_to} 100%);" if has_gradient else f"background: {bg};"
+            bg_img_div = f'<div class="bg-image" style="background-image:url(\'{images.get(str(i), "")}\');"></div>' if images.get(str(i), "") else ""
+            custom_bg_div = ""
 
         num_pos = {"top-left": "top:28px; left:32px;", "top-right": "top:28px; right:32px;",
                     "bottom-left": "bottom:76px; left:32px;", "bottom-right": "bottom:76px; right:32px;",
@@ -436,7 +482,9 @@ def build_carousel_html(slides_data, format_info, brand_name, handle, display_na
         acc_html = f'<p class="accent-text">{accent}</p>' if accent else ""
 
         # ── Логотип на каждом слайде (CSS class, no repeated base64) ──
-        logo_html = '<div class="slide-logo"></div>' if logo_b64 else ""
+        # v5.1: если кастомный фон и на нём уже есть логотип — скрываем авто-логотип
+        show_logo = bool(logo_b64) and not (has_custom_bg and hide_logo_on_custom_bg)
+        logo_html = '<div class="slide-logo"></div>' if show_logo else ""
 
         # ── CTA-изображение на последнем слайде ──
         cta_img_html = ""
@@ -448,6 +496,7 @@ def build_carousel_html(slides_data, format_info, brand_name, handle, display_na
 
         slides_html += f"""
         <div class="slide slide-{i}" data-index="{i}">
+            {custom_bg_div}
             {bg_img_div}
             <div class="slide-content">
                 {logo_html}
@@ -462,7 +511,14 @@ def build_carousel_html(slides_data, format_info, brand_name, handle, display_na
     # ── Logo CSS: base64 embedded ONCE as background-image ──
     logo_css = ""
     if logo_b64:
-        logo_css = f".slide-logo{{position:absolute;top:28px;right:32px;height:38px;width:auto;object-fit:contain;z-index:3;opacity:0.85;background-image:url('{logo_b64}');background-size:contain;background-repeat:no-repeat;background-position:center right;min-width:60px;}}"
+        pos_info = LOGO_POSITIONS.get(logo_position, LOGO_POSITIONS["Правый верх (дефолт)"])
+        logo_css = f".slide-logo{{position:absolute;{pos_info['css']} {pos_info.get('transform','')} height:{logo_size}px;width:auto;object-fit:contain;z-index:3;opacity:0.85;background-image:url('{logo_b64}');background-size:contain;background-repeat:no-repeat;background-position:{pos_info['bg_pos']};min-width:60px;}}"
+
+    # ── v5.1: Custom background CSS (ONCE, как логотип) ──
+    custom_bg_css = ""
+    if custom_bg_b64:
+        # opacity из слайдера
+        custom_bg_css = f".custom-bg{{position:absolute;top:0;left:0;width:100%;height:100%;background-image:url('{custom_bg_b64}');background-size:cover;background-position:center;z-index:0;opacity:{custom_bg_opacity};}}"
 
     html = f"""<!DOCTYPE html><html lang="ru"><head><meta charset="UTF-8"><link href="https://fonts.googleapis.com/css2?family={font_url}&display=swap" rel="stylesheet"><style>
 @import url('https://fonts.googleapis.com/css2?family={font_url}&display=swap');
@@ -473,28 +529,29 @@ body{{font-family:'{font_name}',sans-serif;background:#0a0a0a;display:flex;flex-
 .slide{{min-width:{pw}px;height:{ph}px;position:relative;overflow:hidden;{bg_style}display:flex;flex-direction:column;}}
 .bg-image{{position:absolute;top:0;left:0;width:100%;height:100%;background-size:cover;background-position:center;opacity:0.2;z-index:0;}}
 .slide-content{{position:relative;z-index:1;display:flex;flex-direction:column;height:100%;padding:0 36px 80px 36px;justify-content:center;}}
-.slide-number{{position:absolute;font-size:14px;font-weight:700;color:rgba(255,255,255,0.5);letter-spacing:1px;z-index:2;}}
-.slide-total{{color:rgba(255,255,255,0.25);}}
+.slide-number{{position:absolute;font-size:14px;font-weight:700;color:{headline_color};opacity:0.6;letter-spacing:1px;z-index:2;}}
+.slide-total{{color:{headline_color};opacity:0.35;}}
 .slide-inner{{display:flex;flex-direction:column;gap:14px;}}
 .slide-badge{{display:inline-block;background:{primary};color:#fff;font-size:10px;font-weight:800;padding:5px 16px;border-radius:20px;letter-spacing:2px;text-transform:uppercase;width:fit-content;}}
 .deco-line{{width:48px;height:4px;border-radius:2px;}}
-.headline{{color:#ffffff;letter-spacing:-0.5px;max-width:92%;}}
-.body-text{{line-height:1.65;color:rgba(255,255,255,0.75);max-width:88%;}}
+.headline{{color:{headline_color};letter-spacing:-0.5px;max-width:92%;}}
+.body-text{{line-height:1.65;color:{body_color};max-width:88%;}}
 .accent-text{{font-size:15px;font-weight:700;color:{primary};margin-top:2px;}}
 .slide-bottom{{position:absolute;bottom:64px;left:36px;right:36px;}}
 .brand-bar{{display:flex;align-items:center;gap:10px;}}
-.brand-name{{font-size:13px;font-weight:700;color:rgba(255,255,255,0.6);}}
-.brand-handle{{font-size:12px;color:rgba(255,255,255,0.3);}}
+.brand-name{{font-size:13px;font-weight:700;color:{headline_color};opacity:0.7;}}
+.brand-handle{{font-size:12px;color:{body_color};opacity:0.5;}}
 .progress-bar{{position:absolute;bottom:0;left:0;right:0;padding:14px 28px 18px;display:flex;align-items:center;gap:12px;z-index:10;}}
 .progress-track{{flex:1;height:3px;background:rgba(255,255,255,0.12);border-radius:3px;overflow:hidden;}}
 .progress-fill{{height:100%;background:{primary};border-radius:3px;transition:width 0.3s;}}
-.progress-counter{{font-size:11px;font-weight:600;color:rgba(255,255,255,0.3);min-width:30px;text-align:right;}}
+.progress-counter{{font-size:11px;font-weight:600;color:{body_color};opacity:0.4;min-width:30px;text-align:right;}}
 .swipe-arrow{{position:absolute;right:0;top:0;bottom:0;width:52px;display:flex;align-items:center;justify-content:center;background:linear-gradient(to right,transparent,rgba(0,0,0,0.08));z-index:5;}}
 .nav-dots{{display:flex;justify-content:center;gap:8px;margin-top:20px;}}
 .nav-dot{{width:8px;height:8px;border-radius:50%;background:rgba(255,255,255,0.15);cursor:pointer;transition:all 0.3s;border:none;}}
 .nav-dot.active{{background:{primary};width:28px;border-radius:4px;}}
 /* ── Логотип на каждом слайде (base64 embedded ONCE in CSS) ── */
 {logo_css}
+{custom_bg_css}
 /* ── CTA-изображение на последнем слайде ── */
 .cta-inner{{gap:12px;}}
 .cta-image-container{{display:flex;justify-content:center;margin-top:8px;}}
@@ -511,7 +568,8 @@ def build_zip_export_html(slides_data, format_info, brand_name, handle, display_
                           accent_color, text_dark, text_body_color, bg_color, font_name,
                           font_url, style_info=None, generated_images=None,
                           profile_photo_b64="", content_format_name="",
-                          logo_b64="", cta_image_b64=""):
+                          logo_b64="", cta_image_b64="", custom_bg_b64="", custom_bg_opacity=1.0,
+                          hide_logo_on_custom_bg=False, logo_position="Правый верх (дефолт)", logo_size=38):
     """
     HTML-компонент для клиентского рендера слайдов в PNG и сборки в ZIP.
     Использует html-to-image + jszip + FileSaver.js прямо в браузере.
@@ -524,17 +582,21 @@ def build_zip_export_html(slides_data, format_info, brand_name, handle, display_
     pixel_ratio = round(full_w / pw, 4)
 
     s = style_info or {}
-    primary = s.get("primary_color", accent_color)
-    secondary = s.get("secondary_color", "#1a1a2e")
-    bg = s.get("background_color", bg_color)
-    gradient_from = s.get("gradient_from", secondary)
-    gradient_to = s.get("gradient_to", primary)
+    primary = s.get("primary_color", accent_color) or accent_color
+    secondary = s.get("secondary_color", bg_color) or bg_color
+    bg = s.get("background_color", bg_color) or bg_color
+    gradient_from = s.get("gradient_from", secondary) or secondary
+    gradient_to = s.get("gradient_to", primary) or primary
     has_gradient = s.get("has_gradient", True)
     number_pos = s.get("number_position", "top-left")
     images = generated_images or {}
+    headline_color = s.get("text_color", text_dark) or text_dark or "#ffffff"
+    body_color = s.get("subtitle_color", text_body_color) or text_body_color or "rgba(255,255,255,0.85)"
 
     # ── HTML слайдов (без навигации, просто стопка) ──
     slides_html = ""
+    # v5.1: custom background для всех слайдов (один раз в CSS, как логотип)
+    has_custom_bg = bool(custom_bg_b64)
     for i, slide in enumerate(slides_data):
         sn = i + 1
         stype = slide.get("type", "content")
@@ -544,8 +606,16 @@ def build_zip_export_html(slides_data, format_info, brand_name, handle, display_
         is_hook = stype == "hook"
         is_cta = stype == "cta"
 
-        bg_style = f"background: linear-gradient(135deg, {gradient_from} 0%, {gradient_to} 100%);" if has_gradient else f"background: {bg};"
-        bg_img_div = f'<div class="bg-image" style="background-image:url(\'{images.get(str(i), "")}\');"></div>' if images.get(str(i), "") else ""
+        # Если есть кастомный фон — он главный, градиент отключаем (или оставляем как fallback)
+        if has_custom_bg:
+            bg_style = f"background: {bg};"  # fallback цвет, сам фон — в .custom-bg div
+            # FLUX фоны отключаем, когда есть кастомный фон для всех слайдов
+            bg_img_div = ""
+            custom_bg_div = '<div class="custom-bg"></div>'
+        else:
+            bg_style = f"background: linear-gradient(135deg, {gradient_from} 0%, {gradient_to} 100%);" if has_gradient else f"background: {bg};"
+            bg_img_div = f'<div class="bg-image" style="background-image:url(\'{images.get(str(i), "")}\');"></div>' if images.get(str(i), "") else ""
+            custom_bg_div = ""
 
         num_pos = {"top-left": "top:28px; left:32px;", "top-right": "top:28px; right:32px;",
                     "bottom-left": "bottom:76px; left:32px;", "bottom-right": "bottom:76px; right:32px;",
@@ -560,7 +630,9 @@ def build_zip_export_html(slides_data, format_info, brand_name, handle, display_
         pct = ((i + 1) / total) * 100
         acc_html = f'<p class="accent-text">{accent}</p>' if accent else ""
 
-        logo_html = '<div class="slide-logo"></div>' if logo_b64 else ""
+        # v5.1: если кастомный фон и на нём уже есть логотип — скрываем авто-логотип
+        show_logo = bool(logo_b64) and not (has_custom_bg and hide_logo_on_custom_bg)
+        logo_html = '<div class="slide-logo"></div>' if show_logo else ""
 
         cta_img_html = ""
         if is_cta and cta_image_b64:
@@ -570,6 +642,7 @@ def build_zip_export_html(slides_data, format_info, brand_name, handle, display_
 
         slides_html += f"""
         <div class="slide" data-index="{i}">
+            {custom_bg_div}
             {bg_img_div}
             <div class="slide-content">
                 {logo_html}
@@ -580,10 +653,16 @@ def build_zip_export_html(slides_data, format_info, brand_name, handle, display_
             <div class="progress-bar"><div class="progress-track"><div class="progress-fill" style="width:{pct}%;"></div></div><span class="progress-counter">{sn}/{total}</span></div>
         </div>"""
 
-    # ── Logo CSS ──
+    # ── Logo CSS: base64 embedded ONCE ──
     logo_css = ""
     if logo_b64:
-        logo_css = f".slide-logo{{position:absolute;top:28px;right:32px;height:38px;width:auto;object-fit:contain;z-index:3;opacity:0.85;background-image:url('{logo_b64}');background-size:contain;background-repeat:no-repeat;background-position:center right;min-width:60px;}}"
+        pos_info = LOGO_POSITIONS.get(logo_position, LOGO_POSITIONS["Правый верх (дефолт)"])
+        logo_css = f".slide-logo{{position:absolute;{pos_info['css']} {pos_info.get('transform','')} height:{logo_size}px;width:auto;object-fit:contain;z-index:3;opacity:0.85;background-image:url('{logo_b64}');background-size:contain;background-repeat:no-repeat;background-position:{pos_info['bg_pos']};min-width:60px;}}"
+
+    # ── v5.1: Custom background CSS (ONCE) ──
+    custom_bg_css = ""
+    if custom_bg_b64:
+        custom_bg_css = f".custom-bg{{position:absolute;top:0;left:0;width:100%;height:100%;background-image:url('{custom_bg_b64}');background-size:cover;background-position:center;z-index:0;opacity:{custom_bg_opacity};}}"
 
     html = f"""<!DOCTYPE html><html lang="ru"><head><meta charset="UTF-8">
 <script src="https://cdn.jsdelivr.net/npm/html-to-image@1.11.13/dist/html-to-image.js"></script>
@@ -598,23 +677,24 @@ body{{font-family:'{font_name}',sans-serif;background:#1a1a1a;}}
 .slide{{width:{pw}px;height:{ph}px;position:relative;overflow:hidden;{bg_style}display:flex;flex-direction:column;}}
 .bg-image{{position:absolute;top:0;left:0;width:100%;height:100%;background-size:cover;background-position:center;opacity:0.2;z-index:0;}}
 .slide-content{{position:relative;z-index:1;display:flex;flex-direction:column;height:100%;padding:0 36px 80px 36px;justify-content:center;}}
-.slide-number{{position:absolute;font-size:14px;font-weight:700;color:rgba(255,255,255,0.5);letter-spacing:1px;z-index:2;}}
-.slide-total{{color:rgba(255,255,255,0.25);}}
+.slide-number{{position:absolute;font-size:14px;font-weight:700;color:{headline_color};opacity:0.6;letter-spacing:1px;z-index:2;}}
+.slide-total{{color:{headline_color};opacity:0.35;}}
 .slide-inner{{display:flex;flex-direction:column;gap:14px;}}
 .slide-badge{{display:inline-block;background:{primary};color:#fff;font-size:10px;font-weight:800;padding:5px 16px;border-radius:20px;letter-spacing:2px;text-transform:uppercase;width:fit-content;}}
 .deco-line{{width:48px;height:4px;border-radius:2px;}}
-.headline{{color:#ffffff;letter-spacing:-0.5px;max-width:92%;}}
-.body-text{{line-height:1.65;color:rgba(255,255,255,0.75);max-width:88%;}}
+.headline{{color:{headline_color};letter-spacing:-0.5px;max-width:92%;}}
+.body-text{{line-height:1.65;color:{body_color};max-width:88%;}}
 .accent-text{{font-size:15px;font-weight:700;color:{primary};margin-top:2px;}}
 .slide-bottom{{position:absolute;bottom:64px;left:36px;right:36px;}}
 .brand-bar{{display:flex;align-items:center;gap:10px;}}
-.brand-name{{font-size:13px;font-weight:700;color:rgba(255,255,255,0.6);}}
-.brand-handle{{font-size:12px;color:rgba(255,255,255,0.3);}}
+.brand-name{{font-size:13px;font-weight:700;color:{headline_color};opacity:0.7;}}
+.brand-handle{{font-size:12px;color:{body_color};opacity:0.5;}}
 .progress-bar{{position:absolute;bottom:0;left:0;right:0;padding:14px 28px 18px;display:flex;align-items:center;gap:12px;z-index:10;}}
 .progress-track{{flex:1;height:3px;background:rgba(255,255,255,0.12);border-radius:3px;overflow:hidden;}}
 .progress-fill{{height:100%;background:{primary};border-radius:3px;}}
-.progress-counter{{font-size:11px;font-weight:600;color:rgba(255,255,255,0.3);min-width:30px;text-align:right;}}
+.progress-counter{{font-size:11px;font-weight:600;color:{body_color};opacity:0.4;min-width:30px;text-align:right;}}
 {logo_css}
+{custom_bg_css}
 .cta-inner{{gap:12px;}}
 .cta-image-container{{display:flex;justify-content:center;margin-top:8px;}}
 .cta-image{{width:220px;height:auto;max-height:200px;object-fit:contain;border-radius:16px;box-shadow:0 8px 32px rgba(0,0,0,0.3);}}
@@ -747,13 +827,52 @@ with st.sidebar:
     display_name = st.text_input("Отображаемое имя", value="Наталья")
     st.divider()
     st.subheader("🎨 Цвета")
+    st.caption("Теперь все 4 цвета реально работают. Если загружен референс — цвета из референса имеют приоритет.")
+    # ── v5: пресеты цветов (одним кликом) ──
+    preset_choice = st.selectbox(
+        "Пресет цветов",
+        list(COLOR_PRESETS.keys()),
+        key="color_preset",
+        help="Тёмный / Светлый / White / Deep Green. 'Кастом' = ручные цвета ниже. При выборе пресета цвета ниже обновляются автоматически."
+    )
+    # Применяем пресет, если он сменился
+    if preset_choice != "🎨 Кастом (свои цвета)":
+        preset_data = COLOR_PRESETS.get(preset_choice)
+        if preset_data and st.session_state.get("last_preset") != preset_choice:
+            st.session_state["accent_picker"] = preset_data["accent"]
+            st.session_state["headline_picker"] = preset_data["headline"]
+            st.session_state["body_picker"] = preset_data["body"]
+            st.session_state["bg_picker"] = preset_data["bg"]
+            st.session_state["last_preset"] = preset_choice
+            st.rerun()
+    else:
+        # Запоминаем что сейчас кастом, чтобы можно было повторно применить пресет позже
+        if st.session_state.get("last_preset") != "🎨 Кастом (свои цвета)":
+            st.session_state["last_preset"] = "🎨 Кастом (свои цвета)"
+
     c1, c2 = st.columns(2)
     with c1:
-        accent_color = st.color_picker("Акцент", value="#2FAD64")
-        text_dark = st.color_picker("Тёмный текст", value="#0f1419")
+        accent_color = st.color_picker(
+            "Акцент (бейдж, линия, прогресс)",
+            key="accent_picker",
+            help="Зеленый Naturonata: для бейджа, декоративной линии на хуке, акцентного текста, прогресс-бара"
+        )
+        text_dark = st.color_picker(
+            "Заголовок слайда",
+            key="headline_picker",
+            help="Цвет жирного заголовка. Раньше назывался 'Тёмный текст' и не работал — теперь работает"
+        )
     with c2:
-        text_body_color = st.color_picker("Текст", value="#333333")
-        bg_color = st.color_picker("Фон", value="#1a1a2e")
+        text_body_color = st.color_picker(
+            "Основной текст",
+            key="body_picker",
+            help="Цвет основного описания. Раньше назывался 'Текст' и был захардкожен как белый 75% — теперь управляется"
+        )
+        bg_color = st.color_picker(
+            "Фон / Градиент от",
+            key="bg_picker",
+            help="Цвет фона и начало градиента. Конец градиента — Акцент. Если указан референс — референс переопределяет"
+        )
     st.divider()
     st.subheader("🔤 Шрифт")
     font_choice = st.selectbox("Шрифт", list(FONTS.keys()), index=2)
@@ -768,11 +887,50 @@ with st.sidebar:
     logo_upload = st.file_uploader(" Логотип (PNG)", type=["png", "jpg", "jpeg", "webp"], key="logo_upload",
         help="Загрузите логотип или будет использован дефолтный Naturonata")
     use_default_logo = st.checkbox(" Использовать дефолтный логотип", value=True, key="use_default_logo")
+    # NEW v5.2: позиция логотипа
+    logo_position_choice = st.selectbox(
+        "Позиция логотипа",
+        list(LOGO_POSITIONS.keys()),
+        key="logo_position",
+        help="Где показывать логотип. 'Центр верх' — как на твоём бежевом фоне с логотипом по центру. Дефолт — правый верх."
+    )
+    # NEW v5.3: размер логотипа
+    logo_size_val = st.slider(
+        "Размер логотипа (высота)",
+        min_value=20,
+        max_value=80,
+        value=38,
+        step=2,
+        key="logo_size",
+        help="Высота логотипа в пикселях на превью. При экспорте масштабируется в 1080px. Дефолт 38px как было."
+    )
 
     # CTA-изображение
     cta_image_upload = st.file_uploader(" CTA-изображение (последний слайд)", type=["jpg", "jpeg", "png", "webp"], key="cta_image_upload",
         help="Загрузите изображение для последнего слайда или будет использовано дефолтное")
     use_default_cta_image = st.checkbox(" Использовать дефолтное CTA-изображение", value=True, key="use_default_cta_image")
+
+    st.divider()
+    st.subheader("🖼️ Фон для всех слайдов (NEW)")
+    st.caption("Загрузи свою картинку как на примере (бежевый фон с веточками). Она будет фоном ВСЕХ слайдов.")
+    custom_bg_upload = st.file_uploader(
+        " Загрузить фон (JPG/PNG, 1080×1350)",
+        type=["jpg", "jpeg", "png", "webp"],
+        key="custom_bg_upload",
+        help="Идеально: картинка 1080×1350 без логотипа. Логотип программа добавит сама поверх. Если на твоей картинке уже есть логотип — поставь галочку ниже."
+    )
+    hide_logo_on_custom_bg = st.checkbox(
+        "На моём фоне уже есть логотип — не показывать авто-логотип",
+        value=False,
+        key="hide_logo_custom_bg",
+        help="Если твоя картинка уже содержит NATURONATA как на примере — включи, чтобы не было 2 логотипов"
+    )
+    custom_bg_opacity = st.slider(
+        "Прозрачность фона",
+        0.3, 1.0, 1.0, 0.05,
+        key="custom_bg_opacity",
+        help="1.0 = непрозрачный (как на твоём примере). Уменьши до 0.6-0.8 если текст плохо читается на ярком фоне."
+    )
 
     st.divider()
     st.subheader(" Фото профиля")
@@ -792,6 +950,23 @@ elif use_default_cta_image and os.path.exists(DEFAULT_CTA_IMAGE_PATH):
     cta_image_b64 = file_path_to_base64(DEFAULT_CTA_IMAGE_PATH)
 else:
     cta_image_b64 = ""
+
+# ── v5.1: Custom background для всех слайдов ──
+if custom_bg_upload:
+    custom_bg_b64 = image_to_base64(custom_bg_upload)
+else:
+    custom_bg_b64 = ""
+
+# hide_logo_on_custom_bg и custom_bg_opacity уже из sidebar (session_state)
+# Значения по умолчанию, если ключи ещё не созданы
+if "hide_logo_custom_bg" not in st.session_state:
+    st.session_state.hide_logo_custom_bg = False
+if "custom_bg_opacity" not in st.session_state:
+    st.session_state.custom_bg_opacity = 1.0
+
+# Переменные для передачи в функции (из session_state, чтобы не терялись)
+hide_logo_flag = st.session_state.get("hide_logo_custom_bg", False)
+bg_opacity_val = st.session_state.get("custom_bg_opacity", 1.0)
 
 
 # ═════════════════════════════════════════════════════════════════════
@@ -820,16 +995,21 @@ custom_cta = st.text_input(" Кастомный CTA (необязательно)
 # ─── Шаг 2: Формат контента ──────────────────────────────────────────
 st.markdown('<div class="step-header">2️ Формат контента</div>', unsafe_allow_html=True)
 
+# ── FIX: формат сохраняется в session_state (было: сбрасывался в Викторину) ──
+if "selected_content_format" not in st.session_state:
+    st.session_state.selected_content_format = list(CONTENT_FORMATS.keys())[0]
+
 fmt_cols = st.columns(4)
-selected_format = None
 for idx, (fmt_name, fmt_data) in enumerate(CONTENT_FORMATS.items()):
     with fmt_cols[idx % 4]:
-        if st.button(f"{fmt_data['icon']}\n{fmt_name.split('(', 1)[0].strip()}", key=f"fmt_{idx}", use_container_width=True):
-            selected_format = fmt_name
+        is_selected = st.session_state.selected_content_format == fmt_name
+        label = f"{'✅ ' if is_selected else ''}{fmt_data['icon']}\n{fmt_name.split('(', 1)[0].strip()}"
+        btn_type = "primary" if is_selected else "secondary"
+        if st.button(label, key=f"fmt_{idx}", use_container_width=True, type=btn_type):
+            st.session_state.selected_content_format = fmt_name
+            st.rerun()
 
-if selected_format is None:
-    selected_format = list(CONTENT_FORMATS.keys())[0]
-
+selected_format = st.session_state.selected_content_format
 content_format = CONTENT_FORMATS[selected_format]
 
 st.markdown(f'<div class="audience-box"><strong>{selected_format}</strong><br>{content_format["description"]}<br><em>Структура: {content_format["structure"]}</em></div>', unsafe_allow_html=True)
@@ -936,6 +1116,11 @@ if generate_btn:
                 content_format_name=content_format.get("name", ""),
                 logo_b64=logo_b64,
                 cta_image_b64=cta_image_b64,
+                custom_bg_b64=custom_bg_b64,
+                custom_bg_opacity=bg_opacity_val,
+                hide_logo_on_custom_bg=hide_logo_flag,
+                logo_position=st.session_state.get("logo_position", "Правый верх (дефолт)"),
+                logo_size=st.session_state.get("logo_size", 38),
             )
             st.session_state.carousel_html = carousel_html
             st.session_state.slides_generated = True
@@ -978,6 +1163,11 @@ if st.session_state.carousel_html:
             content_format_name=content_format.get("name", ""),
             logo_b64=logo_b64,
             cta_image_b64=cta_image_b64,
+            custom_bg_b64=custom_bg_b64,
+            custom_bg_opacity=bg_opacity_val,
+            hide_logo_on_custom_bg=hide_logo_flag,
+            logo_position=st.session_state.get("logo_position", "Правый верх (дефолт)"),
+            logo_size=st.session_state.get("logo_size", 38),
         )
         st.components.v1.html(zip_export_html, height=120, scrolling=False)
 
