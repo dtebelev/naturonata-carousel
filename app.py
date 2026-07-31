@@ -50,7 +50,7 @@ ASSETS_DIR = SCRIPT_DIR / "assets"
 DEFAULT_LOGO_PATH = str(ASSETS_DIR / "logo.png")
 DEFAULT_CTA_IMAGE_PATH = str(ASSETS_DIR / "cta_badge.png")
 # Changes to slide HTML bump this version so existing session previews rebuild automatically.
-CAROUSEL_RENDERER_VERSION = "v5.15"
+CAROUSEL_RENDERER_VERSION = "v5.17"
 
 # ─── Форматы ─────────────────────────────────────────────────────────
 FORMATS = {
@@ -249,12 +249,19 @@ def init_state():
         # v5.2: позиция логотипа
         "logo_position": "Правый верх (дефолт)",
         "logo_size": 38,
+        "preview_slide_index": 0,
     }
     for k, v in defaults.items():
         if k not in st.session_state:
             st.session_state[k] = v
 
 init_state()
+
+
+def remember_preview_slide(index: int):
+    """Keep the edited card open in the HTML preview after Streamlit reruns."""
+    st.session_state.preview_slide_index = index
+
 
 # ─── CSS ──────────────────────────────────────────────────────────────
 STYLES = """
@@ -550,8 +557,13 @@ def build_carousel_html(slides_data, format_info, brand_name, handle, display_na
                          generated_images=None, profile_photo_b64="", content_format_name="",
                          logo_b64="", cta_image_b64="", custom_bg_b64="", custom_bg_opacity=1.0,
                          hide_logo_on_custom_bg=False, logo_position="Правый верх (дефолт)", logo_size=38,
-                         custom_first_slide_b64="", custom_last_slide_b64=""):
+                         custom_first_slide_b64="", custom_last_slide_b64="", initial_slide_index=0):
     total = len(slides_data)
+    try:
+        initial_slide_index = int(initial_slide_index)
+    except (TypeError, ValueError):
+        initial_slide_index = 0
+    initial_slide_index = max(0, min(initial_slide_index, max(total - 1, 0)))
     pw, ph = format_info["preview_w"], format_info["preview_h"]
     s = style_info or {}
     # FIX: цвета фона и текста теперь реально работают (раньше были захардкожены #ffffff)
@@ -706,9 +718,9 @@ body{{font-family:'{font_name}',sans-serif;background:#0a0a0a;display:flex;flex-
 .cta-image-container{{position:absolute;left:50%;bottom:88px;transform:translateX(-50%);z-index:2;line-height:0;pointer-events:none;}}
 .cta-image{{width:118px;height:118px;object-fit:contain;display:block;}}
 </style></head><body>
-<div class="carousel-viewport" id="viewport"><div class="carousel-track" id="track">{slides_html}</div></div>
-<div class="nav-dots" id="dots">{''.join([f'<div class="nav-dot{" active" if i==0 else ""}" data-slide="{i}"></div>' for i in range(total)])}</div>
-<script>let cs=0;const ts={total},sw={pw};function gs(i){{if(i<0||i>=ts)return;cs=i;document.getElementById('track').style.transform='translateX('+(-i*sw)+'px)';document.querySelectorAll('.nav-dot').forEach((d,j)=>{{d.classList.toggle('active',j===i);}});}}document.querySelectorAll('.nav-dot').forEach(d=>{{d.addEventListener('click',()=>gs(parseInt(d.dataset.slide)));}});let sx=0,id=false;const vp=document.getElementById('viewport');vp.addEventListener('pointerdown',e=>{{sx=e.clientX;id=true;}});vp.addEventListener('pointerup',e=>{{if(!id)return;id=false;const df=e.clientX-sx;if(df<-40)gs(cs+1);else if(df>40)gs(cs-1);}});document.addEventListener('keydown',e=>{{if(e.key==='ArrowRight')gs(cs+1);if(e.key==='ArrowLeft')gs(cs-1);}});</script>
+<div class="carousel-viewport" id="viewport"><div class="carousel-track" id="track" style="transform:translateX({-initial_slide_index * pw}px);">{slides_html}</div></div>
+<div class="nav-dots" id="dots">{''.join([f'<div class="nav-dot{" active" if i==initial_slide_index else ""}" data-slide="{i}"></div>' for i in range(total)])}</div>
+<script>let cs={initial_slide_index};const ts={total},sw={pw};function gs(i){{if(i<0||i>=ts)return;cs=i;document.getElementById('track').style.transform='translateX('+(-i*sw)+'px)';document.querySelectorAll('.nav-dot').forEach((d,j)=>{{d.classList.toggle('active',j===i);}});}}document.querySelectorAll('.nav-dot').forEach(d=>{{d.addEventListener('click',()=>gs(parseInt(d.dataset.slide)));}});let sx=0,id=false;const vp=document.getElementById('viewport');vp.addEventListener('pointerdown',e=>{{sx=e.clientX;id=true;}});vp.addEventListener('pointerup',e=>{{if(!id)return;id=false;const df=e.clientX-sx;if(df<-40)gs(cs+1);else if(df>40)gs(cs-1);}});document.addEventListener('keydown',e=>{{if(e.key==='ArrowRight')gs(cs+1);if(e.key==='ArrowLeft')gs(cs-1);}});</script>
 </body></html>"""
     return html
 
@@ -1324,6 +1336,7 @@ if generate_btn:
 
         progress.progress(85, text="🔧 Сборка HTML...")
         try:
+            st.session_state.preview_slide_index = 0
             carousel_html = build_carousel_html(
                 slides_data=slides_data, format_info=format_info, brand_name=brand_name,
                 handle=handle, display_name=display_name, accent_color=accent_color,
@@ -1340,6 +1353,7 @@ if generate_btn:
                 logo_size=st.session_state.get("logo_size", 38),
                 custom_first_slide_b64=custom_first_slide_b64,
                 custom_last_slide_b64=custom_last_slide_b64,
+                initial_slide_index=st.session_state.preview_slide_index,
             )
             st.session_state.carousel_html = carousel_html
             st.session_state.carousel_renderer_version = CAROUSEL_RENDERER_VERSION
@@ -1420,20 +1434,26 @@ if st.session_state.get("carousel_data"):
                     "Тип слайда",
                     ["hook", "content", "cta"],
                     key=f"edit_type_{i}",
-                    help="hook = первый (хук), cta = последний (призыв), content = остальные. Можно менять, но лучше оставить 1 hook и 1 cta."
+                    help="hook = первый (хук), cta = последний (призыв), content = остальные. Можно менять, но лучше оставить 1 hook и 1 cta.",
+                    on_change=remember_preview_slide,
+                    args=(i,)
                 )
             with c2:
                 st.text_input(
                     "Акцент (для hook и cta)",
                     key=f"edit_accent_{i}",
                     placeholder="Акцентная строка, напр. '72% детей...'",
-                    help="Пусто для content слайдов"
+                    help="Пусто для content слайдов",
+                    on_change=remember_preview_slide,
+                    args=(i,)
                 )
             st.text_input(
                 f"Заголовок",
                 key=f"edit_headline_{i}",
                 placeholder="Жирный заголовок слайда",
-                help="40-60 символов ideal для Instagram"
+                help="40-60 символов ideal для Instagram",
+                on_change=remember_preview_slide,
+                args=(i,)
             )
             st.slider(
                 "Размер заголовка (px)",
@@ -1441,7 +1461,9 @@ if st.session_state.get("carousel_data"):
                 max_value=HEADLINE_SIZE_MAX,
                 step=1,
                 key=f"edit_headline_size_{i}",
-                help="Меняет размер букв только на этой карточке. Дефолт зависит от типа: hook 32px, CTA 28px, content 24px."
+                help="Меняет размер букв только на этой карточке. Дефолт зависит от типа: hook 32px, CTA 28px, content 24px.",
+                on_change=remember_preview_slide,
+                args=(i,)
             )
             st.slider(
                 "Размер основного текста (px)",
@@ -1449,7 +1471,9 @@ if st.session_state.get("carousel_data"):
                 max_value=BODY_SIZE_MAX,
                 step=1,
                 key=f"edit_body_size_{i}",
-                help="Меняет размер основного текста только на этой карточке. Дефолт: hook 17px, CTA 16px, content 15px."
+                help="Меняет размер основного текста только на этой карточке. Дефолт: hook 17px, CTA 16px, content 15px.",
+                on_change=remember_preview_slide,
+                args=(i,)
             )
             st.slider(
                 "Размер акцентной строки (px)",
@@ -1457,7 +1481,9 @@ if st.session_state.get("carousel_data"):
                 max_value=ACCENT_SIZE_MAX,
                 step=1,
                 key=f"edit_accent_size_{i}",
-                help="Меняет строку под основным текстом, например «Открой новые подходы в воспитании!»."
+                help="Меняет строку под основным текстом, например «Открой новые подходы в воспитании!».",
+                on_change=remember_preview_slide,
+                args=(i,)
             )
             st.slider(
                 "Масштаб подписи внизу (@канал / бренд), %",
@@ -1465,7 +1491,9 @@ if st.session_state.get("carousel_data"):
                 max_value=FOOTER_SCALE_MAX,
                 step=5,
                 key=f"edit_footer_scale_{i}",
-                help="Одновременно меняет размер подписи внизу карточки: @канала и названия бренда, если оно показано. 100% — исходный размер."
+                help="Одновременно меняет размер подписи внизу карточки: @канала и названия бренда, если оно показано. 100% — исходный размер.",
+                on_change=remember_preview_slide,
+                args=(i,)
             )
             if cur_type == "hook":
                 st.slider(
@@ -1474,7 +1502,9 @@ if st.session_state.get("carousel_data"):
                     max_value=BADGE_SIZE_MAX,
                     step=1,
                     key=f"edit_badge_size_{i}",
-                    help="Одновременно масштабирует фон лейбла, отступы, скругление и текст: «Викторина», «Лайфхак», «Гайд» и т. д."
+                    help="Одновременно масштабирует фон лейбла, отступы, скругление и текст: «Викторина», «Лайфхак», «Гайд» и т. д.",
+                    on_change=remember_preview_slide,
+                    args=(i,)
                 )
             # Счётчик символов
             hl_len = len(st.session_state.get(f"edit_headline_{i}", ""))
@@ -1486,7 +1516,9 @@ if st.session_state.get("carousel_data"):
                 key=f"edit_body_{i}",
                 height=140,
                 placeholder="2-3 строки, поддерживает перенос \n → <br>",
-                help="Для списков используй → или •\n → автоматически станет <br>"
+                help="Для списков используй → или •\n → автоматически станет <br>",
+                on_change=remember_preview_slide,
+                args=(i,)
             )
             body_len = len(st.session_state.get(f"edit_body_{i}", ""))
             if body_len > 300:
@@ -1546,6 +1578,7 @@ if st.session_state.get("carousel_data"):
                 logo_size=st.session_state.get("logo_size", 38),
                 custom_first_slide_b64=custom_first_slide_b64 if 'custom_first_slide_b64' in globals() else "",
                 custom_last_slide_b64=custom_last_slide_b64 if 'custom_last_slide_b64' in globals() else "",
+                initial_slide_index=st.session_state.get("preview_slide_index", 0),
             )
             st.session_state.carousel_html = rebuilt_html
             st.session_state.carousel_renderer_version = CAROUSEL_RENDERER_VERSION
