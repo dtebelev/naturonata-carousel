@@ -50,7 +50,7 @@ ASSETS_DIR = SCRIPT_DIR / "assets"
 DEFAULT_LOGO_PATH = str(ASSETS_DIR / "logo.png")
 DEFAULT_CTA_IMAGE_PATH = str(ASSETS_DIR / "cta_badge.png")
 # Changes to slide HTML bump this version so existing session previews rebuild automatically.
-CAROUSEL_RENDERER_VERSION = "v5.9"
+CAROUSEL_RENDERER_VERSION = "v5.14"
 
 # ─── Форматы ─────────────────────────────────────────────────────────
 FORMATS = {
@@ -95,6 +95,23 @@ LOGO_POSITIONS = {
     "Левый низ": {"css": "bottom:80px; left:32px; right:auto; top:auto;", "bg_pos": "center left", "transform": ""},
     "Центр низ": {"css": "bottom:80px; left:50%; right:auto; top:auto;", "bg_pos": "center", "transform": "transform:translateX(-50%);"},
 }
+
+# Настраиваемые размеры текста конкретной карточки (значения на превью).
+HEADLINE_SIZE_DEFAULTS = {"hook": 32, "cta": 28, "content": 24}
+HEADLINE_SIZE_MIN = 18
+HEADLINE_SIZE_MAX = 48
+BODY_SIZE_DEFAULTS = {"hook": 17, "cta": 16, "content": 15}
+BODY_SIZE_MIN = 12
+BODY_SIZE_MAX = 24
+BADGE_SIZE_DEFAULT = 10
+BADGE_SIZE_MIN = 8
+BADGE_SIZE_MAX = 16
+ACCENT_SIZE_DEFAULT = 15
+ACCENT_SIZE_MIN = 11
+ACCENT_SIZE_MAX = 24
+FOOTER_SCALE_DEFAULT = 100
+FOOTER_SCALE_MIN = 70
+FOOTER_SCALE_MAX = 160
 
 # ═════════════════════════════════════════════════════════════════════
 #  🧠 АУДИТОРИИ NATURONATA
@@ -278,6 +295,58 @@ def file_path_to_base64(path: str) -> str:
     with open(path, "rb") as f:
         b64 = base64.b64encode(f.read()).decode("utf-8")
     return f"data:{mime};base64,{b64}"
+
+
+def normalize_headline_size(value, slide_type: str = "content") -> int:
+    """Return a safe preview font size for a slide headline."""
+    default_size = HEADLINE_SIZE_DEFAULTS.get(slide_type, HEADLINE_SIZE_DEFAULTS["content"])
+    try:
+        size = int(value)
+    except (TypeError, ValueError):
+        size = default_size
+    return max(HEADLINE_SIZE_MIN, min(HEADLINE_SIZE_MAX, size))
+
+
+def normalize_body_size(value, slide_type: str = "content") -> int:
+    """Return a safe preview font size for a slide body text."""
+    default_size = BODY_SIZE_DEFAULTS.get(slide_type, BODY_SIZE_DEFAULTS["content"])
+    try:
+        size = int(value)
+    except (TypeError, ValueError):
+        size = default_size
+    return max(BODY_SIZE_MIN, min(BODY_SIZE_MAX, size))
+
+
+def normalize_badge_size(value) -> int:
+    """Return a safe base size used to scale the complete content-format badge."""
+    try:
+        size = int(value)
+    except (TypeError, ValueError):
+        size = BADGE_SIZE_DEFAULT
+    return max(BADGE_SIZE_MIN, min(BADGE_SIZE_MAX, size))
+
+
+def normalize_accent_size(value) -> int:
+    """Return a safe preview font size for the accent line."""
+    try:
+        size = int(value)
+    except (TypeError, ValueError):
+        size = ACCENT_SIZE_DEFAULT
+    return max(ACCENT_SIZE_MIN, min(ACCENT_SIZE_MAX, size))
+
+
+def normalize_footer_scale(value) -> int:
+    """Return a safe percentage for the brand/@channel line at the bottom."""
+    try:
+        scale = int(value)
+    except (TypeError, ValueError):
+        scale = FOOTER_SCALE_DEFAULT
+    return max(FOOTER_SCALE_MIN, min(FOOTER_SCALE_MAX, scale))
+
+
+def css_px(value: float) -> str:
+    """Format a CSS pixel value without unnecessary trailing zeroes."""
+    return f"{value:.2f}".rstrip("0").rstrip(".") + "px"
 
 
 def get_default_cta_base64() -> str:
@@ -529,25 +598,36 @@ def build_carousel_html(slides_data, format_info, brand_name, handle, display_na
         # На первой и последней карточках верхний счётчик дублирует progress-bar и может пересекаться с дизайном.
         slide_number_html = "" if i == 0 or is_last_slide else f'<div class="slide-number" style="{num_css}">{sn}<span class="slide-total">/{total}</span></div>'
 
-        if is_hook: hs, hw, hlh, bs = "32px", "900", "1.15", "17px"; badge = f'<div class="slide-badge">{content_format_name or "КАРУСЕЛЬ"}</div>'
-        elif is_cta: hs, hw, hlh, bs = "28px", "800", "1.2", "16px"; badge = ""
-        else: hs, hw, hlh, bs = "24px", "700", "1.25", "15px"; badge = ""
+        render_type = "hook" if is_hook else "cta" if is_cta else "content"
+        hs = f"{normalize_headline_size(slide.get('headline_size'), render_type)}px"
+        bs = f"{normalize_body_size(slide.get('body_size'), render_type)}px"
+        if is_hook:
+            hw, hlh = "900", "1.15"
+            badge_size = normalize_badge_size(slide.get("badge_size"))
+            badge_scale = badge_size / BADGE_SIZE_DEFAULT
+            badge = f'<div class="slide-badge" style="font-size:{badge_size}px;padding:{5 * badge_scale:.1f}px {16 * badge_scale:.1f}px;border-radius:{20 * badge_scale:.1f}px;letter-spacing:{2 * badge_scale:.1f}px;">{content_format_name or "КАРУСЕЛЬ"}</div>'
+        elif is_cta: hw, hlh, badge = "800", "1.2", ""
+        else: hw, hlh, badge = "700", "1.25", ""
 
         deco = f'<div class="deco-line" style="background:{primary};"></div>' if is_hook else ""
         arrow = """<div class="swipe-arrow"><svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M9 18l6-6-6-6" stroke="rgba(255,255,255,0.35)" stroke-width="2" stroke-linecap="round"/></svg></div>""" if i < total - 1 else ""
         pct = ((i + 1) / total) * 100
-        acc_html = f'<p class="accent-text">{accent}</p>' if accent else ""
-
-        # ── Логотип на каждом слайде (CSS class, no repeated base64) ──
-        # v5.1: если кастомный фон и на нём уже есть логотип — скрываем авто-логотип
-        show_logo = bool(logo_b64) and not (has_custom_bg and hide_logo_on_custom_bg)
-        logo_html = '<div class="slide-logo"></div>' if show_logo else ""
+        accent_size = normalize_accent_size(slide.get("accent_size"))
+        acc_html = f'<p class="accent-text" style="font-size:{accent_size}px;">{accent}</p>' if accent else ""
+        footer_scale = normalize_footer_scale(slide.get("footer_scale")) / 100
+        brand_name_size = css_px(13 * footer_scale)
+        brand_handle_size = css_px(12 * footer_scale)
 
         # ── CTA-изображение на последнем слайде ──
-        cta_img_html = ""
         # CTA-изображение всегда на последней карточке, независимо от type из GPT.
-        if is_last_slide and cta_image_b64:
-            cta_img_html = f'<div class="cta-image-container"><img class="cta-image" src="{cta_image_b64}" alt="Naturonata CTA"></div>'
+        show_cta_badge = is_last_slide and bool(cta_image_b64)
+        cta_img_html = f'<div class="cta-image-container"><img class="cta-image" src="{cta_image_b64}" alt="Naturonata CTA"></div>' if show_cta_badge else ""
+
+        # ── Логотип на каждом слайде (CSS class, no repeated base64) ──
+        # v5.1: если кастомный фон и на нём уже есть логотип — скрываем авто-логотип.
+        # На CTA-карточке с бейджем логотип не нужен: бейдж заменяет его в композиции.
+        show_logo = bool(logo_b64) and not (has_custom_bg and hide_logo_on_custom_bg) and not show_cta_badge
+        logo_html = '<div class="slide-logo"></div>' if show_logo else ""
 
         # ── Разное позиционирование для CTA-слайда ──
         inner_class = "slide-inner cta-inner" if is_cta else "slide-inner"
@@ -560,7 +640,7 @@ def build_carousel_html(slides_data, format_info, brand_name, handle, display_na
                 {logo_html}
                 {slide_number_html}
                 <div class="{inner_class}">{badge}{deco}<h2 class="headline" style="font-size:{hs};font-weight:{hw};line-height:{hlh};">{headline}</h2><p class="body-text" style="font-size:{bs};">{body}</p>{acc_html}{cta_img_html}</div>
-                <div class="slide-bottom"><div class="brand-bar"><span class="brand-name">{brand_name}</span><span class="brand-handle">{handle}</span></div></div>
+                <div class="slide-bottom"><div class="brand-bar"><span class="brand-name" style="font-size:{brand_name_size};">{brand_name}</span><span class="brand-handle" style="font-size:{brand_handle_size};">{handle}</span></div></div>
             </div>
             <div class="progress-bar"><div class="progress-track"><div class="progress-fill" style="width:{pct}%;"></div></div><span class="progress-counter">{sn}/{total}</span></div>
             {arrow}
@@ -685,22 +765,33 @@ def build_zip_export_html(slides_data, format_info, brand_name, handle, display_
         # На первой и последней карточках верхний счётчик дублирует progress-bar и может пересекаться с дизайном.
         slide_number_html = "" if i == 0 or is_last_slide else f'<div class="slide-number" style="{num_css}">{sn}<span class="slide-total">/{total}</span></div>'
 
-        if is_hook: hs, hw, hlh, bs = "32px", "900", "1.15", "17px"; badge = f'<div class="slide-badge">{content_format_name or "КАРУСЕЛЬ"}</div>'
-        elif is_cta: hs, hw, hlh, bs = "28px", "800", "1.2", "16px"; badge = ""
-        else: hs, hw, hlh, bs = "24px", "700", "1.25", "15px"; badge = ""
+        render_type = "hook" if is_hook else "cta" if is_cta else "content"
+        hs = f"{normalize_headline_size(slide.get('headline_size'), render_type)}px"
+        bs = f"{normalize_body_size(slide.get('body_size'), render_type)}px"
+        if is_hook:
+            hw, hlh = "900", "1.15"
+            badge_size = normalize_badge_size(slide.get("badge_size"))
+            badge_scale = badge_size / BADGE_SIZE_DEFAULT
+            badge = f'<div class="slide-badge" style="font-size:{badge_size}px;padding:{5 * badge_scale:.1f}px {16 * badge_scale:.1f}px;border-radius:{20 * badge_scale:.1f}px;letter-spacing:{2 * badge_scale:.1f}px;">{content_format_name or "КАРУСЕЛЬ"}</div>'
+        elif is_cta: hw, hlh, badge = "800", "1.2", ""
+        else: hw, hlh, badge = "700", "1.25", ""
 
         deco = f'<div class="deco-line" style="background:{primary};"></div>' if is_hook else ""
         pct = ((i + 1) / total) * 100
-        acc_html = f'<p class="accent-text">{accent}</p>' if accent else ""
+        accent_size = normalize_accent_size(slide.get("accent_size"))
+        acc_html = f'<p class="accent-text" style="font-size:{accent_size}px;">{accent}</p>' if accent else ""
+        footer_scale = normalize_footer_scale(slide.get("footer_scale")) / 100
+        brand_name_size = css_px(13 * footer_scale)
+        brand_handle_size = css_px(12 * footer_scale)
 
-        # v5.1: если кастомный фон и на нём уже есть логотип — скрываем авто-логотип
-        show_logo = bool(logo_b64) and not (has_custom_bg and hide_logo_on_custom_bg)
-        logo_html = '<div class="slide-logo"></div>' if show_logo else ""
-
-        cta_img_html = ""
         # CTA-изображение всегда на последней карточке, независимо от type из GPT.
-        if is_last_slide and cta_image_b64:
-            cta_img_html = f'<div class="cta-image-container"><img class="cta-image" src="{cta_image_b64}" alt="Naturonata CTA"></div>'
+        show_cta_badge = is_last_slide and bool(cta_image_b64)
+        cta_img_html = f'<div class="cta-image-container"><img class="cta-image" src="{cta_image_b64}" alt="Naturonata CTA"></div>' if show_cta_badge else ""
+
+        # v5.1: если кастомный фон и на нём уже есть логотип — скрываем авто-логотип.
+        # На CTA-карточке с бейджем логотип не нужен: бейдж заменяет его в композиции.
+        show_logo = bool(logo_b64) and not (has_custom_bg and hide_logo_on_custom_bg) and not show_cta_badge
+        logo_html = '<div class="slide-logo"></div>' if show_logo else ""
 
         inner_class = "slide-inner cta-inner" if is_cta else "slide-inner"
 
@@ -712,7 +803,7 @@ def build_zip_export_html(slides_data, format_info, brand_name, handle, display_
                 {logo_html}
                 {slide_number_html}
                 <div class="{inner_class}">{badge}{deco}<h2 class="headline" style="font-size:{hs};font-weight:{hw};line-height:{hlh};">{headline}</h2><p class="body-text" style="font-size:{bs};">{body}</p>{acc_html}{cta_img_html}</div>
-                <div class="slide-bottom"><div class="brand-bar"><span class="brand-name">{brand_name}</span><span class="brand-handle">{handle}</span></div></div>
+                <div class="slide-bottom"><div class="brand-bar"><span class="brand-name" style="font-size:{brand_name_size};">{brand_name}</span><span class="brand-handle" style="font-size:{brand_handle_size};">{handle}</span></div></div>
             </div>
             <div class="progress-bar"><div class="progress-track"><div class="progress-fill" style="width:{pct}%;"></div></div><span class="progress-counter">{sn}/{total}</span></div>
         </div>"""
@@ -1208,7 +1299,7 @@ if generate_btn:
 # ─── v5.5: Редактирование слайдов (live, expanders) ──────────────────────────
 if st.session_state.get("carousel_data"):
     st.markdown('<div class="step-header">6.5 ✏️ Редактировать слайды (live)</div>', unsafe_allow_html=True)
-    st.caption("Меняй заголовок, текст, акцент и тип каждого слайда — превью обновляется мгновенно. Безопасно: только текст, дизайн не ломается.")
+    st.caption("Меняй заголовок, основной текст, их размеры, акцент и тип каждого слайда — превью обновляется мгновенно.")
 
     # Инициализация ключей редактирования из текущих данных (если их ещё нет)
     for i, slide in enumerate(st.session_state.carousel_data):
@@ -1220,6 +1311,17 @@ if st.session_state.get("carousel_data"):
             st.session_state[f"edit_accent_{i}"] = slide.get("accent", "")
         if f"edit_type_{i}" not in st.session_state:
             st.session_state[f"edit_type_{i}"] = slide.get("type", "content")
+        render_type = "cta" if i == len(st.session_state.carousel_data) - 1 else slide.get("type", "content")
+        if f"edit_headline_size_{i}" not in st.session_state:
+            st.session_state[f"edit_headline_size_{i}"] = normalize_headline_size(slide.get("headline_size"), render_type)
+        if f"edit_body_size_{i}" not in st.session_state:
+            st.session_state[f"edit_body_size_{i}"] = normalize_body_size(slide.get("body_size"), render_type)
+        if f"edit_badge_size_{i}" not in st.session_state:
+            st.session_state[f"edit_badge_size_{i}"] = normalize_badge_size(slide.get("badge_size"))
+        if f"edit_accent_size_{i}" not in st.session_state:
+            st.session_state[f"edit_accent_size_{i}"] = normalize_accent_size(slide.get("accent_size"))
+        if f"edit_footer_scale_{i}" not in st.session_state:
+            st.session_state[f"edit_footer_scale_{i}"] = normalize_footer_scale(slide.get("footer_scale"))
 
     # Кнопки управления
     ec1, ec2, ec3 = st.columns([1,1,2])
@@ -1234,6 +1336,12 @@ if st.session_state.get("carousel_data"):
                     st.session_state[f"edit_body_{i}"] = slide.get("body", "")
                     st.session_state[f"edit_accent_{i}"] = slide.get("accent", "")
                     st.session_state[f"edit_type_{i}"] = slide.get("type", "content")
+                    render_type = "cta" if i == len(orig) - 1 else slide.get("type", "content")
+                    st.session_state[f"edit_headline_size_{i}"] = normalize_headline_size(slide.get("headline_size"), render_type)
+                    st.session_state[f"edit_body_size_{i}"] = normalize_body_size(slide.get("body_size"), render_type)
+                    st.session_state[f"edit_badge_size_{i}"] = normalize_badge_size(slide.get("badge_size"))
+                    st.session_state[f"edit_accent_size_{i}"] = normalize_accent_size(slide.get("accent_size"))
+                    st.session_state[f"edit_footer_scale_{i}"] = normalize_footer_scale(slide.get("footer_scale"))
                 st.success("Сброшено к оригиналу")
                 st.rerun()
     with ec2:
@@ -1269,6 +1377,47 @@ if st.session_state.get("carousel_data"):
                 placeholder="Жирный заголовок слайда",
                 help="40-60 символов ideal для Instagram"
             )
+            st.slider(
+                "Размер заголовка (px)",
+                min_value=HEADLINE_SIZE_MIN,
+                max_value=HEADLINE_SIZE_MAX,
+                step=1,
+                key=f"edit_headline_size_{i}",
+                help="Меняет размер букв только на этой карточке. Дефолт зависит от типа: hook 32px, CTA 28px, content 24px."
+            )
+            st.slider(
+                "Размер основного текста (px)",
+                min_value=BODY_SIZE_MIN,
+                max_value=BODY_SIZE_MAX,
+                step=1,
+                key=f"edit_body_size_{i}",
+                help="Меняет размер основного текста только на этой карточке. Дефолт: hook 17px, CTA 16px, content 15px."
+            )
+            st.slider(
+                "Размер акцентной строки (px)",
+                min_value=ACCENT_SIZE_MIN,
+                max_value=ACCENT_SIZE_MAX,
+                step=1,
+                key=f"edit_accent_size_{i}",
+                help="Меняет строку под основным текстом, например «Открой новые подходы в воспитании!»."
+            )
+            st.slider(
+                "Масштаб подписи внизу (@канал / бренд), %",
+                min_value=FOOTER_SCALE_MIN,
+                max_value=FOOTER_SCALE_MAX,
+                step=5,
+                key=f"edit_footer_scale_{i}",
+                help="Одновременно меняет размер подписи внизу карточки: @канала и названия бренда, если оно показано. 100% — исходный размер."
+            )
+            if cur_type == "hook":
+                st.slider(
+                    "Размер лейбла целиком (px)",
+                    min_value=BADGE_SIZE_MIN,
+                    max_value=BADGE_SIZE_MAX,
+                    step=1,
+                    key=f"edit_badge_size_{i}",
+                    help="Одновременно масштабирует фон лейбла, отступы, скругление и текст: «Викторина», «Лайфхак», «Гайд» и т. д."
+                )
             # Счётчик символов
             hl_len = len(st.session_state.get(f"edit_headline_{i}", ""))
             if hl_len > 80:
@@ -1290,11 +1439,18 @@ if st.session_state.get("carousel_data"):
     has_changes = False
     for i in range(len(st.session_state.carousel_data)):
         old = st.session_state.carousel_data[i]
+        new_type = st.session_state.get(f"edit_type_{i}", old.get("type", "content"))
+        render_type = "cta" if i == len(st.session_state.carousel_data) - 1 else new_type
         new_slide = {
-            "type": st.session_state.get(f"edit_type_{i}", old.get("type", "content")),
+            "type": new_type,
             "headline": st.session_state.get(f"edit_headline_{i}", old.get("headline", "")),
+            "headline_size": normalize_headline_size(st.session_state.get(f"edit_headline_size_{i}", old.get("headline_size")), render_type),
             "body": st.session_state.get(f"edit_body_{i}", old.get("body", "")),
+            "body_size": normalize_body_size(st.session_state.get(f"edit_body_size_{i}", old.get("body_size")), render_type),
             "accent": st.session_state.get(f"edit_accent_{i}", old.get("accent", "")),
+            "accent_size": normalize_accent_size(st.session_state.get(f"edit_accent_size_{i}", old.get("accent_size"))),
+            "badge_size": normalize_badge_size(st.session_state.get(f"edit_badge_size_{i}", old.get("badge_size"))),
+            "footer_scale": normalize_footer_scale(st.session_state.get(f"edit_footer_scale_{i}", old.get("footer_scale"))),
         }
         if new_slide != old:
             has_changes = True
