@@ -48,7 +48,7 @@ st.set_page_config(
 SCRIPT_DIR = Path(__file__).parent.resolve()
 ASSETS_DIR = SCRIPT_DIR / "assets"
 DEFAULT_LOGO_PATH = str(ASSETS_DIR / "logo.png")
-DEFAULT_CTA_IMAGE_PATH = str(ASSETS_DIR / "cta_image.jpg")
+DEFAULT_CTA_IMAGE_PATH = str(ASSETS_DIR / "cta_badge.png")
 
 # ─── Форматы ─────────────────────────────────────────────────────────
 FORMATS = {
@@ -488,6 +488,8 @@ def build_carousel_html(slides_data, format_info, brand_name, handle, display_na
                     "bottom-left": "bottom:76px; left:32px;", "bottom-right": "bottom:76px; right:32px;",
                     "center": "top:28px; left:50%; transform:translateX(-50%);"}
         num_css = num_pos.get(number_pos, num_pos["top-left"])
+        # На первой карточке счётчик сверху дублирует progress-bar и может пересекаться с бейджем.
+        slide_number_html = "" if i == 0 else f'<div class="slide-number" style="{num_css}">{sn}<span class="slide-total">/{total}</span></div>'
 
         if is_hook: hs, hw, hlh, bs = "32px", "900", "1.15", "17px"; badge = f'<div class="slide-badge">{content_format_name or "КАРУСЕЛЬ"}</div>'
         elif is_cta: hs, hw, hlh, bs = "28px", "800", "1.2", "16px"; badge = ""
@@ -517,7 +519,7 @@ def build_carousel_html(slides_data, format_info, brand_name, handle, display_na
             {bg_img_div}
             <div class="slide-content">
                 {logo_html}
-                <div class="slide-number" style="{num_css}">{sn}<span class="slide-total">/{total}</span></div>
+                {slide_number_html}
                 <div class="{inner_class}">{badge}{deco}<h2 class="headline" style="font-size:{hs};font-weight:{hw};line-height:{hlh};">{headline}</h2><p class="body-text" style="font-size:{bs};">{body}</p>{acc_html}{cta_img_html}</div>
                 <div class="slide-bottom"><div class="brand-bar"><span class="brand-name">{brand_name}</span><span class="brand-handle">{handle}</span></div></div>
             </div>
@@ -529,7 +531,7 @@ def build_carousel_html(slides_data, format_info, brand_name, handle, display_na
     logo_css = ""
     if logo_b64:
         pos_info = LOGO_POSITIONS.get(logo_position, LOGO_POSITIONS["Правый верх (дефолт)"])
-        logo_css = f".slide-logo{{position:absolute;{pos_info['css']} {pos_info.get('transform','')} height:{logo_size}px;width:auto;object-fit:contain;z-index:3;opacity:0.85;background-image:url('{logo_b64}');background-size:contain;background-repeat:no-repeat;background-position:{pos_info['bg_pos']};min-width:60px;}}"
+        logo_css = f".slide-logo{{position:absolute;{pos_info['css']} {pos_info.get('transform','')} height:{logo_size}px;width:{logo_size}px;object-fit:contain;z-index:3;opacity:0.85;background-image:url('{logo_b64}');background-size:contain;background-repeat:no-repeat;background-position:{pos_info['bg_pos']};}}"
 
     # ── v5.1: Custom background CSS (ONCE, как логотип) ──
     custom_bg_css = ""
@@ -570,9 +572,10 @@ body{{font-family:'{font_name}',sans-serif;background:#0a0a0a;display:flex;flex-
 {logo_css}
 {custom_bg_css}
 /* ── CTA-изображение на последнем слайде ── */
-.cta-inner{{gap:12px;}}
-.cta-image-container{{display:flex;justify-content:center;margin-top:8px;}}
-.cta-image{{width:220px;height:auto;max-height:200px;object-fit:contain;border-radius:16px;box-shadow:0 8px 32px rgba(0,0,0,0.3);}}
+.cta-inner{{gap:12px;padding-bottom:134px;}}
+/* CTA — прозрачный слой: не участвует в раскладке текста и не создаёт карточку/фон. */
+.cta-image-container{{position:absolute;left:50%;bottom:88px;transform:translateX(-50%);z-index:2;line-height:0;pointer-events:none;}}
+.cta-image{{width:118px;height:118px;object-fit:contain;display:block;}}
 </style></head><body>
 <div class="carousel-viewport" id="viewport"><div class="carousel-track" id="track">{slides_html}</div></div>
 <div class="nav-dots" id="dots">{''.join([f'<div class="nav-dot{" active" if i==0 else ""}" data-slide="{i}"></div>' for i in range(total)])}</div>
@@ -638,6 +641,8 @@ def build_zip_export_html(slides_data, format_info, brand_name, handle, display_
                     "bottom-left": "bottom:76px; left:32px;", "bottom-right": "bottom:76px; right:32px;",
                     "center": "top:28px; left:50%; transform:translateX(-50%);"}
         num_css = num_pos.get(number_pos, num_pos["top-left"])
+        # На первой карточке счётчик сверху дублирует progress-bar и может пересекаться с бейджем.
+        slide_number_html = "" if i == 0 else f'<div class="slide-number" style="{num_css}">{sn}<span class="slide-total">/{total}</span></div>'
 
         if is_hook: hs, hw, hlh, bs = "32px", "900", "1.15", "17px"; badge = f'<div class="slide-badge">{content_format_name or "КАРУСЕЛЬ"}</div>'
         elif is_cta: hs, hw, hlh, bs = "28px", "800", "1.2", "16px"; badge = ""
@@ -663,7 +668,7 @@ def build_zip_export_html(slides_data, format_info, brand_name, handle, display_
             {bg_img_div}
             <div class="slide-content">
                 {logo_html}
-                <div class="slide-number" style="{num_css}">{sn}<span class="slide-total">/{total}</span></div>
+                {slide_number_html}
                 <div class="{inner_class}">{badge}{deco}<h2 class="headline" style="font-size:{hs};font-weight:{hw};line-height:{hlh};">{headline}</h2><p class="body-text" style="font-size:{bs};">{body}</p>{acc_html}{cta_img_html}</div>
                 <div class="slide-bottom"><div class="brand-bar"><span class="brand-name">{brand_name}</span><span class="brand-handle">{handle}</span></div></div>
             </div>
@@ -674,7 +679,7 @@ def build_zip_export_html(slides_data, format_info, brand_name, handle, display_
     logo_css = ""
     if logo_b64:
         pos_info = LOGO_POSITIONS.get(logo_position, LOGO_POSITIONS["Правый верх (дефолт)"])
-        logo_css = f".slide-logo{{position:absolute;{pos_info['css']} {pos_info.get('transform','')} height:{logo_size}px;width:auto;object-fit:contain;z-index:3;opacity:0.85;background-image:url('{logo_b64}');background-size:contain;background-repeat:no-repeat;background-position:{pos_info['bg_pos']};min-width:60px;}}"
+        logo_css = f".slide-logo{{position:absolute;{pos_info['css']} {pos_info.get('transform','')} height:{logo_size}px;width:{logo_size}px;object-fit:contain;z-index:3;opacity:0.85;background-image:url('{logo_b64}');background-size:contain;background-repeat:no-repeat;background-position:{pos_info['bg_pos']};}}"
 
     # ── v5.1: Custom background CSS (ONCE) ──
     custom_bg_css = ""
@@ -712,9 +717,10 @@ body{{font-family:'{font_name}',sans-serif;background:#1a1a1a;}}
 .progress-counter{{font-size:11px;font-weight:600;color:{body_color};opacity:0.4;min-width:30px;text-align:right;}}
 {logo_css}
 {custom_bg_css}
-.cta-inner{{gap:12px;}}
-.cta-image-container{{display:flex;justify-content:center;margin-top:8px;}}
-.cta-image{{width:220px;height:auto;max-height:200px;object-fit:contain;border-radius:16px;box-shadow:0 8px 32px rgba(0,0,0,0.3);}}
+.cta-inner{{gap:12px;padding-bottom:134px;}}
+/* CTA — прозрачный слой: не участвует в раскладке текста и не создаёт карточку/фон. */
+.cta-image-container{{position:absolute;left:50%;bottom:88px;transform:translateX(-50%);z-index:2;line-height:0;pointer-events:none;}}
+.cta-image{{width:118px;height:118px;object-fit:contain;display:block;}}
 #export-controls{{text-align:center;padding:20px;}}
 #download-zip-btn{{background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);color:#fff;border:none;font-weight:700;font-size:1.1rem;padding:14px 36px;border-radius:12px;cursor:pointer;transition:opacity 0.2s;}}
 #download-zip-btn:hover{{opacity:0.9;}}
@@ -915,16 +921,16 @@ with st.sidebar:
     logo_size_val = st.slider(
         "Размер логотипа (высота)",
         min_value=20,
-        max_value=80,
+        max_value=160,
         value=38,
         step=2,
         key="logo_size",
-        help="Высота логотипа в пикселях на превью. При экспорте масштабируется в 1080px. Дефолт 38px как было."
+        help="Размер логотипа в пикселях на превью: от 20 до 160. При экспорте масштабируется до 1080px. Дефолт 38px."
     )
 
     # CTA-изображение
     cta_image_upload = st.file_uploader(" CTA-изображение (последний слайд)", type=["jpg", "jpeg", "png", "webp"], key="cta_image_upload",
-        help="Загрузите изображение для последнего слайда или будет использовано дефолтное")
+        help="Изображение для последнего слайда. Для своего файла используйте PNG с прозрачным фоном; дефолтная иллюстрация уже прозрачная.")
     use_default_cta_image = st.checkbox(" Использовать дефолтное CTA-изображение", value=True, key="use_default_cta_image")
 
     st.divider()
