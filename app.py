@@ -50,7 +50,7 @@ ASSETS_DIR = SCRIPT_DIR / "assets"
 DEFAULT_LOGO_PATH = str(ASSETS_DIR / "logo.png")
 DEFAULT_CTA_IMAGE_PATH = str(ASSETS_DIR / "cta_badge.png")
 # Changes to slide HTML bump this version so existing session previews rebuild automatically.
-CAROUSEL_RENDERER_VERSION = "v5.14"
+CAROUSEL_RENDERER_VERSION = "v5.15"
 
 # ─── Форматы ─────────────────────────────────────────────────────────
 FORMATS = {
@@ -549,7 +549,8 @@ def build_carousel_html(slides_data, format_info, brand_name, handle, display_na
                          text_dark, text_body_color, bg_color, font_name, font_url, style_info=None,
                          generated_images=None, profile_photo_b64="", content_format_name="",
                          logo_b64="", cta_image_b64="", custom_bg_b64="", custom_bg_opacity=1.0,
-                         hide_logo_on_custom_bg=False, logo_position="Правый верх (дефолт)", logo_size=38):
+                         hide_logo_on_custom_bg=False, logo_position="Правый верх (дефолт)", logo_size=38,
+                         custom_first_slide_b64="", custom_last_slide_b64=""):
     total = len(slides_data)
     pw, ph = format_info["preview_w"], format_info["preview_h"]
     s = style_info or {}
@@ -569,8 +570,15 @@ def build_carousel_html(slides_data, format_info, brand_name, handle, display_na
     slides_html = ""
     # v5.1: custom background для всех слайдов (один раз в CSS, как логотип)
     has_custom_bg = bool(custom_bg_b64)
+    # Define a fallback before the loop so a carousel made entirely of ready slides is safe.
+    bg_style = f"background: {bg};" if has_custom_bg else (f"background: linear-gradient(135deg, {gradient_from} 0%, {gradient_to} 100%);" if has_gradient else f"background: {bg};")
     for i, slide in enumerate(slides_data):
         sn = i + 1
+        custom_ready_slide_b64 = custom_first_slide_b64 if i == 0 and custom_first_slide_b64 else (custom_last_slide_b64 if i == total - 1 and custom_last_slide_b64 else "")
+        if custom_ready_slide_b64:
+            # A ready-made edge slide is shown as-is: no generated HTML, logo, progress or overlays.
+            slides_html += f'<div class="slide slide-{i} custom-ready-slide" data-index="{i}"><img class="custom-ready-slide-image" src="{custom_ready_slide_b64}" alt="Готовый слайд {sn}"></div>'
+            continue
         stype = slide.get("type", "content")
         headline = slide.get("headline", "")
         body = slide.get("body", "").replace("\n", "<br>")
@@ -665,6 +673,8 @@ body{{font-family:'{font_name}',sans-serif;background:#0a0a0a;display:flex;flex-
 .carousel-viewport{{width:{pw}px;height:{ph}px;overflow:hidden;position:relative;border-radius:12px;box-shadow:0 25px 80px rgba(0,0,0,0.6);}}
 .carousel-track{{display:flex;transition:transform 0.45s cubic-bezier(0.25,0.46,0.45,0.94);height:100%;}}
 .slide{{min-width:{pw}px;height:{ph}px;position:relative;overflow:hidden;{bg_style}display:flex;flex-direction:column;}}
+.custom-ready-slide{{display:block;background:#000;}}
+.custom-ready-slide-image{{display:block;width:100%;height:100%;object-fit:contain;}}
 .bg-image{{position:absolute;top:0;left:0;width:100%;height:100%;background-size:cover;background-position:center;opacity:0.2;z-index:0;}}
 .slide-content{{position:relative;z-index:1;display:flex;flex-direction:column;height:100%;padding:0 36px 80px 36px;justify-content:center;}}
 .slide-number{{position:absolute;font-size:14px;font-weight:700;color:{headline_color};opacity:0.6;letter-spacing:1px;z-index:2;}}
@@ -708,7 +718,8 @@ def build_zip_export_html(slides_data, format_info, brand_name, handle, display_
                           font_url, style_info=None, generated_images=None,
                           profile_photo_b64="", content_format_name="",
                           logo_b64="", cta_image_b64="", custom_bg_b64="", custom_bg_opacity=1.0,
-                          hide_logo_on_custom_bg=False, logo_position="Правый верх (дефолт)", logo_size=38):
+                          hide_logo_on_custom_bg=False, logo_position="Правый верх (дефолт)", logo_size=38,
+                         custom_first_slide_b64="", custom_last_slide_b64=""):
     """
     HTML-компонент для клиентского рендера слайдов в PNG и сборки в ZIP.
     Использует html-to-image + jszip + FileSaver.js прямо в браузере.
@@ -736,8 +747,15 @@ def build_zip_export_html(slides_data, format_info, brand_name, handle, display_
     slides_html = ""
     # v5.1: custom background для всех слайдов (один раз в CSS, как логотип)
     has_custom_bg = bool(custom_bg_b64)
+    # Define a fallback before the loop so a carousel made entirely of ready slides is safe.
+    bg_style = f"background: {bg};" if has_custom_bg else (f"background: linear-gradient(135deg, {gradient_from} 0%, {gradient_to} 100%);" if has_gradient else f"background: {bg};")
     for i, slide in enumerate(slides_data):
         sn = i + 1
+        custom_ready_slide_b64 = custom_first_slide_b64 if i == 0 and custom_first_slide_b64 else (custom_last_slide_b64 if i == total - 1 and custom_last_slide_b64 else "")
+        if custom_ready_slide_b64:
+            # A ready-made edge slide is shown as-is: no generated HTML, logo, progress or overlays.
+            slides_html += f'<div class="slide slide-{i} custom-ready-slide" data-index="{i}"><img class="custom-ready-slide-image" src="{custom_ready_slide_b64}" alt="Готовый слайд {sn}"></div>'
+            continue
         stype = slide.get("type", "content")
         headline = slide.get("headline", "")
         body = slide.get("body", "").replace("\n", "<br>")
@@ -830,6 +848,8 @@ def build_zip_export_html(slides_data, format_info, brand_name, handle, display_
 body{{font-family:'{font_name}',sans-serif;background:#1a1a1a;}}
 #slides-container{{position:fixed;top:0;left:0;z-index:-1;opacity:0;pointer-events:none;}}
 .slide{{width:{pw}px;height:{ph}px;position:relative;overflow:hidden;{bg_style}display:flex;flex-direction:column;}}
+.custom-ready-slide{{display:block;background:#000;}}
+.custom-ready-slide-image{{display:block;width:100%;height:100%;object-fit:contain;}}
 .bg-image{{position:absolute;top:0;left:0;width:100%;height:100%;background-size:cover;background-position:center;opacity:0.2;z-index:0;}}
 .slide-content{{position:relative;z-index:1;display:flex;flex-direction:column;height:100%;padding:0 36px 80px 36px;justify-content:center;}}
 .slide-number{{position:absolute;font-size:14px;font-weight:700;color:{headline_color};opacity:0.6;letter-spacing:1px;z-index:2;}}
@@ -1067,6 +1087,30 @@ with st.sidebar:
     use_default_cta_image = st.checkbox(" Использовать дефолтное CTA-изображение", value=True, key="use_default_cta_image")
 
     st.divider()
+    st.subheader("🖼️ Готовые первый и последний слайд")
+    st.caption("Загруженная картинка полностью заменяет выбранную крайнюю карточку — без текста, лого, счётчиков, прогресса и других элементов программы поверх неё.")
+    use_custom_first_slide = st.checkbox("Использовать готовый первый слайд", value=False, key="use_custom_first_slide")
+    custom_first_slide_upload = None
+    if use_custom_first_slide:
+        custom_first_slide_upload = st.file_uploader(
+            "Загрузить готовый первый слайд", type=["jpg", "jpeg", "png", "webp"],
+            key="custom_first_slide_upload",
+            help="Подготовь картинку в пропорциях выбранного формата. Она будет показана полностью, без наложений."
+        )
+        if not custom_first_slide_upload:
+            st.caption("Загрузи готовую картинку, чтобы заменить первую карточку.")
+    use_custom_last_slide = st.checkbox("Использовать готовый последний слайд", value=False, key="use_custom_last_slide")
+    custom_last_slide_upload = None
+    if use_custom_last_slide:
+        custom_last_slide_upload = st.file_uploader(
+            "Загрузить готовый последний слайд", type=["jpg", "jpeg", "png", "webp"],
+            key="custom_last_slide_upload",
+            help="Подготовь картинку в пропорциях выбранного формата. Она будет показана полностью, без CTA, лого и других наложений."
+        )
+        if not custom_last_slide_upload:
+            st.caption("Загрузи готовую картинку, чтобы заменить последнюю карточку.")
+
+    st.divider()
     st.subheader("🖼️ Фон для всех слайдов (NEW)")
     st.caption("Загрузи свою картинку как на примере (бежевый фон с веточками). Она будет фоном ВСЕХ слайдов.")
     custom_bg_upload = st.file_uploader(
@@ -1106,6 +1150,10 @@ elif use_default_cta_image:
     cta_image_b64 = get_default_cta_base64()
 else:
     cta_image_b64 = ""
+
+# ── v5.15: готовые крайние карточки полностью заменяют HTML-слайды ──
+custom_first_slide_b64 = image_to_base64(custom_first_slide_upload) if use_custom_first_slide and custom_first_slide_upload else ""
+custom_last_slide_b64 = image_to_base64(custom_last_slide_upload) if use_custom_last_slide and custom_last_slide_upload else ""
 
 # ── v5.1: Custom background для всех слайдов ──
 if custom_bg_upload:
@@ -1174,7 +1222,7 @@ st.markdown(f'<div class="audience-box"><strong>{selected_format}</strong><br>{c
 st.markdown('<div class="step-header">3️ Настройки карусели</div>', unsafe_allow_html=True)
 
 c1, c2, c3 = st.columns(3)
-with c1: num_slides = st.slider("Количество слайдов", 3, 10, 7, 1)
+with c1: num_slides = st.slider("Количество слайдов", 3, 14, 7, 1, help="От 3 до 14 карточек. Больше слайдов — больше текста, времени генерации и стоимости API.")
 with c2: format_choice = st.selectbox("Формат", list(FORMATS.keys()), index=1); format_info = FORMATS[format_choice]
 with c3: ref_image = st.file_uploader(" Референс", type=["jpg", "jpeg", "png", "webp"], help="Загрузите пример дизайна карусели")
 
@@ -1198,6 +1246,14 @@ if generate_images:
         with ic[i % len(ic)]:
             if st.checkbox(f"Слайд {i+1}", value=(i == 0), key=f"img_slide_{i}"):
                 selected_slides.append(i)
+    ready_slide_indexes = set()
+    if custom_first_slide_b64:
+        ready_slide_indexes.add(0)
+    if custom_last_slide_b64:
+        ready_slide_indexes.add(num_slides - 1)
+    if ready_slide_indexes:
+        selected_slides = [index for index in selected_slides if index not in ready_slide_indexes]
+        st.caption("Готовые первый/последний слайды исключены из генерации фоновых изображений: они будут использованы как есть.")
 
 # ─── Шаг 6: Генерация ────────────────────────────────────────────────
 st.markdown('<div class="step-header">6️ Генерация</div>', unsafe_allow_html=True)
@@ -1282,6 +1338,8 @@ if generate_btn:
                 hide_logo_on_custom_bg=hide_logo_flag,
                 logo_position=st.session_state.get("logo_position", "Правый верх (дефолт)"),
                 logo_size=st.session_state.get("logo_size", 38),
+                custom_first_slide_b64=custom_first_slide_b64,
+                custom_last_slide_b64=custom_last_slide_b64,
             )
             st.session_state.carousel_html = carousel_html
             st.session_state.carousel_renderer_version = CAROUSEL_RENDERER_VERSION
@@ -1486,6 +1544,8 @@ if st.session_state.get("carousel_data"):
                 hide_logo_on_custom_bg=st.session_state.get("hide_logo_custom_bg", False),
                 logo_position=st.session_state.get("logo_position", "Правый верх (дефолт)"),
                 logo_size=st.session_state.get("logo_size", 38),
+                custom_first_slide_b64=custom_first_slide_b64 if 'custom_first_slide_b64' in globals() else "",
+                custom_last_slide_b64=custom_last_slide_b64 if 'custom_last_slide_b64' in globals() else "",
             )
             st.session_state.carousel_html = rebuilt_html
             st.session_state.carousel_renderer_version = CAROUSEL_RENDERER_VERSION
@@ -1538,6 +1598,8 @@ if st.session_state.carousel_html:
             hide_logo_on_custom_bg=hide_logo_flag,
             logo_position=st.session_state.get("logo_position", "Правый верх (дефолт)"),
             logo_size=st.session_state.get("logo_size", 38),
+            custom_first_slide_b64=custom_first_slide_b64,
+            custom_last_slide_b64=custom_last_slide_b64,
         )
         st.components.v1.html(zip_export_html, height=120, scrolling=False)
 
