@@ -49,6 +49,8 @@ SCRIPT_DIR = Path(__file__).parent.resolve()
 ASSETS_DIR = SCRIPT_DIR / "assets"
 DEFAULT_LOGO_PATH = str(ASSETS_DIR / "logo.png")
 DEFAULT_CTA_IMAGE_PATH = str(ASSETS_DIR / "cta_badge.png")
+# Changes to slide HTML bump this version so existing session previews rebuild automatically.
+CAROUSEL_RENDERER_VERSION = "v5.9"
 
 # ─── Форматы ─────────────────────────────────────────────────────────
 FORMATS = {
@@ -218,6 +220,7 @@ def init_state():
     defaults = {
         "carousel_html": None, "carousel_data": None, "carousel_data_original": None, "slides_generated": False,
         "exported_slides": [], "generated_images": {}, "style_info": None, "html_path": None,
+        "carousel_renderer_version": None,
         "selected_content_format": list(CONTENT_FORMATS.keys())[0],
         # v5: пресеты цветов + сохранение пикера
         "color_preset": "🌙 Naturonata Dark (дефолт)",
@@ -275,6 +278,39 @@ def file_path_to_base64(path: str) -> str:
     with open(path, "rb") as f:
         b64 = base64.b64encode(f.read()).decode("utf-8")
     return f"data:{mime};base64,{b64}"
+
+
+def get_default_cta_base64() -> str:
+    """Return the transparent default CTA badge, including a safe source-image fallback."""
+    if os.path.exists(DEFAULT_CTA_IMAGE_PATH):
+        return file_path_to_base64(DEFAULT_CTA_IMAGE_PATH)
+
+    # If a deploy has the new code but not yet the new asset, build the cropped
+    # transparent badge in memory from the original PNG rather than omitting CTA.
+    source_path = ASSETS_DIR / "cta_image.png"
+    if not source_path.exists():
+        return ""
+    try:
+        from PIL import Image
+        with Image.open(source_path) as source:
+            image = source.convert("RGBA")
+        alpha = image.getchannel("A")
+        visible = alpha.point(lambda value: 255 if value > 20 else 0)
+        bbox = visible.getbbox()
+        if not bbox:
+            return ""
+        padding = 10
+        left, top, right, bottom = bbox
+        badge = image.crop((
+            max(0, left - padding), max(0, top - padding),
+            min(image.width, right + padding), min(image.height, bottom + padding),
+        ))
+        output = BytesIO()
+        badge.save(output, format="PNG", optimize=True)
+        return f"data:image/png;base64,{base64.b64encode(output.getvalue()).decode('ascii')}"
+    except Exception:
+        # The original PNG still has a transparent background, even if it is not cropped.
+        return file_path_to_base64(str(source_path))
 
 
 def embed_fonts_in_html(html_path: str, font_name: str):
@@ -470,8 +506,10 @@ def build_carousel_html(slides_data, format_info, brand_name, handle, display_na
         headline = slide.get("headline", "")
         body = slide.get("body", "").replace("\n", "<br>")
         accent = slide.get("accent", "")
+        is_last_slide = i == total - 1
         is_hook = stype == "hook"
-        is_cta = stype == "cta"
+        # Последняя карточка всегда CTA визуально, даже если GPT вернул type="content".
+        is_cta = stype == "cta" or is_last_slide
 
         # Если есть кастомный фон — он главный, градиент отключаем (или оставляем как fallback)
         if has_custom_bg:
@@ -488,8 +526,8 @@ def build_carousel_html(slides_data, format_info, brand_name, handle, display_na
                     "bottom-left": "bottom:76px; left:32px;", "bottom-right": "bottom:76px; right:32px;",
                     "center": "top:28px; left:50%; transform:translateX(-50%);"}
         num_css = num_pos.get(number_pos, num_pos["top-left"])
-        # На первой карточке счётчик сверху дублирует progress-bar и может пересекаться с бейджем.
-        slide_number_html = "" if i == 0 else f'<div class="slide-number" style="{num_css}">{sn}<span class="slide-total">/{total}</span></div>'
+        # На первой и последней карточках верхний счётчик дублирует progress-bar и может пересекаться с дизайном.
+        slide_number_html = "" if i == 0 or is_last_slide else f'<div class="slide-number" style="{num_css}">{sn}<span class="slide-total">/{total}</span></div>'
 
         if is_hook: hs, hw, hlh, bs = "32px", "900", "1.15", "17px"; badge = f'<div class="slide-badge">{content_format_name or "КАРУСЕЛЬ"}</div>'
         elif is_cta: hs, hw, hlh, bs = "28px", "800", "1.2", "16px"; badge = ""
@@ -507,7 +545,8 @@ def build_carousel_html(slides_data, format_info, brand_name, handle, display_na
 
         # ── CTA-изображение на последнем слайде ──
         cta_img_html = ""
-        if is_cta and cta_image_b64:
+        # CTA-изображение всегда на последней карточке, независимо от type из GPT.
+        if is_last_slide and cta_image_b64:
             cta_img_html = f'<div class="cta-image-container"><img class="cta-image" src="{cta_image_b64}" alt="Naturonata CTA"></div>'
 
         # ── Разное позиционирование для CTA-слайда ──
@@ -623,8 +662,10 @@ def build_zip_export_html(slides_data, format_info, brand_name, handle, display_
         headline = slide.get("headline", "")
         body = slide.get("body", "").replace("\n", "<br>")
         accent = slide.get("accent", "")
+        is_last_slide = i == total - 1
         is_hook = stype == "hook"
-        is_cta = stype == "cta"
+        # Последняя карточка всегда CTA визуально, даже если GPT вернул type="content".
+        is_cta = stype == "cta" or is_last_slide
 
         # Если есть кастомный фон — он главный, градиент отключаем (или оставляем как fallback)
         if has_custom_bg:
@@ -641,8 +682,8 @@ def build_zip_export_html(slides_data, format_info, brand_name, handle, display_
                     "bottom-left": "bottom:76px; left:32px;", "bottom-right": "bottom:76px; right:32px;",
                     "center": "top:28px; left:50%; transform:translateX(-50%);"}
         num_css = num_pos.get(number_pos, num_pos["top-left"])
-        # На первой карточке счётчик сверху дублирует progress-bar и может пересекаться с бейджем.
-        slide_number_html = "" if i == 0 else f'<div class="slide-number" style="{num_css}">{sn}<span class="slide-total">/{total}</span></div>'
+        # На первой и последней карточках верхний счётчик дублирует progress-bar и может пересекаться с дизайном.
+        slide_number_html = "" if i == 0 or is_last_slide else f'<div class="slide-number" style="{num_css}">{sn}<span class="slide-total">/{total}</span></div>'
 
         if is_hook: hs, hw, hlh, bs = "32px", "900", "1.15", "17px"; badge = f'<div class="slide-badge">{content_format_name or "КАРУСЕЛЬ"}</div>'
         elif is_cta: hs, hw, hlh, bs = "28px", "800", "1.2", "16px"; badge = ""
@@ -657,7 +698,8 @@ def build_zip_export_html(slides_data, format_info, brand_name, handle, display_
         logo_html = '<div class="slide-logo"></div>' if show_logo else ""
 
         cta_img_html = ""
-        if is_cta and cta_image_b64:
+        # CTA-изображение всегда на последней карточке, независимо от type из GPT.
+        if is_last_slide and cta_image_b64:
             cta_img_html = f'<div class="cta-image-container"><img class="cta-image" src="{cta_image_b64}" alt="Naturonata CTA"></div>'
 
         inner_class = "slide-inner cta-inner" if is_cta else "slide-inner"
@@ -969,8 +1011,8 @@ else:
 
 if cta_image_upload:
     cta_image_b64 = image_to_base64(cta_image_upload)
-elif use_default_cta_image and os.path.exists(DEFAULT_CTA_IMAGE_PATH):
-    cta_image_b64 = file_path_to_base64(DEFAULT_CTA_IMAGE_PATH)
+elif use_default_cta_image:
+    cta_image_b64 = get_default_cta_base64()
 else:
     cta_image_b64 = ""
 
@@ -1151,6 +1193,7 @@ if generate_btn:
                 logo_size=st.session_state.get("logo_size", 38),
             )
             st.session_state.carousel_html = carousel_html
+            st.session_state.carousel_renderer_version = CAROUSEL_RENDERER_VERSION
             st.session_state.slides_generated = True
             tmp_dir = tempfile.mkdtemp()
             html_path = os.path.join(tmp_dir, "carousel.html")
@@ -1257,7 +1300,8 @@ if st.session_state.get("carousel_data"):
             has_changes = True
         new_data.append(new_slide)
 
-    if has_changes:
+    renderer_needs_rebuild = st.session_state.get("carousel_renderer_version") != CAROUSEL_RENDERER_VERSION
+    if has_changes or renderer_needs_rebuild:
         st.session_state.carousel_data = new_data
         # Пересборка HTML с текущими настройками дизайна (цвета, фон, лого)
         try:
@@ -1288,6 +1332,7 @@ if st.session_state.get("carousel_data"):
                 logo_size=st.session_state.get("logo_size", 38),
             )
             st.session_state.carousel_html = rebuilt_html
+            st.session_state.carousel_renderer_version = CAROUSEL_RENDERER_VERSION
             # Обновляем html_path для Playwright экспорта
             import os, tempfile
             from pathlib import Path
