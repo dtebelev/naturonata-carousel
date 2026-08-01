@@ -50,7 +50,7 @@ ASSETS_DIR = SCRIPT_DIR / "assets"
 DEFAULT_LOGO_PATH = str(ASSETS_DIR / "logo.png")
 DEFAULT_CTA_IMAGE_PATH = str(ASSETS_DIR / "cta_badge.png")
 # Changes to slide HTML bump this version so existing session previews rebuild automatically.
-CAROUSEL_RENDERER_VERSION = "v5.17"
+CAROUSEL_RENDERER_VERSION = "v5.18"
 
 # ─── Форматы ─────────────────────────────────────────────────────────
 FORMATS = {
@@ -237,6 +237,8 @@ def init_state():
     defaults = {
         "carousel_html": None, "carousel_data": None, "carousel_data_original": None, "slides_generated": False,
         "exported_slides": [], "generated_images": {}, "style_info": None, "html_path": None,
+        # Snapshot of media and edge-slide settings used for the current generated carousel.
+        "carousel_assets": {},
         "carousel_renderer_version": None,
         "selected_content_format": list(CONTENT_FORMATS.keys())[0],
         # v5: пресеты цветов + сохранение пикера
@@ -302,6 +304,11 @@ def file_path_to_base64(path: str) -> str:
     with open(path, "rb") as f:
         b64 = base64.b64encode(f.read()).decode("utf-8")
     return f"data:{mime};base64,{b64}"
+
+
+def uploaded_file_name(upload, fallback: str = "не загружен") -> str:
+    """Return only a display name for an uploaded file; never changes its stream."""
+    return getattr(upload, "name", fallback) if upload else fallback
 
 
 def normalize_headline_size(value, slide_type: str = "content") -> int:
@@ -1068,8 +1075,8 @@ with st.sidebar:
     st.subheader("🖼️ Модель картинок")
     flux_model = st.selectbox("FLUX модель", list(FLUX_MODELS.keys()), index=0)
     st.divider()
-    st.subheader(" Логотип и CTA-изображение")
-    st.caption("Логотип на **каждом слайде**, CTA-изображение — на **последнем**")
+    st.subheader(" Логотип и изображения")
+    st.caption("Логотип добавляется на обычные слайды. CTA-картинка — маленькая иллюстрация внутри обычного последнего слайда.")
 
     # Логотип
     logo_upload = st.file_uploader(" Логотип (PNG)", type=["png", "jpg", "jpeg", "webp"], key="logo_upload",
@@ -1093,34 +1100,40 @@ with st.sidebar:
         help="Размер логотипа в пикселях на превью: от 20 до 160. При экспорте масштабируется до 1080px. Дефолт 38px."
     )
 
-    # CTA-изображение
-    cta_image_upload = st.file_uploader(" CTA-изображение (последний слайд)", type=["jpg", "jpeg", "png", "webp"], key="cta_image_upload",
-        help="Изображение для последнего слайда. Для своего файла используйте PNG с прозрачным фоном; дефолтная иллюстрация уже прозрачная.")
+    # Обычное CTA-изображение: оно не заменяет карточку, а стоит маленькой иллюстрацией внутри финального слайда.
+    cta_image_upload = st.file_uploader(
+        "CTA-картинка внутри обычного последнего слайда (не обложка)",
+        type=["jpg", "jpeg", "png", "webp"], key="cta_image_upload",
+        help="Это небольшая иллюстрация внутри стандартного последнего слайда. Не загружай сюда готовый первый или готовый последний слайд. Для своего CTA лучше PNG с прозрачным фоном."
+    )
     use_default_cta_image = st.checkbox(" Использовать дефолтное CTA-изображение", value=True, key="use_default_cta_image")
 
     st.divider()
     st.subheader("🖼️ Готовые первый и последний слайд")
-    st.caption("Загруженная картинка полностью заменяет выбранную крайнюю карточку — без текста, лого, счётчиков, прогресса и других элементов программы поверх неё.")
+    st.caption("Это самостоятельные готовые карточки. Они полностью заменяют крайний слайд: поверх не будет текста, лого, счётчиков, прогресса или CTA.")
     use_custom_first_slide = st.checkbox("Использовать готовый первый слайд", value=False, key="use_custom_first_slide")
-    custom_first_slide_upload = None
-    if use_custom_first_slide:
-        custom_first_slide_upload = st.file_uploader(
-            "Загрузить готовый первый слайд", type=["jpg", "jpeg", "png", "webp"],
-            key="custom_first_slide_upload",
-            help="Подготовь картинку в пропорциях выбранного формата. Она будет показана полностью, без наложений."
-        )
-        if not custom_first_slide_upload:
-            st.caption("Загрузи готовую картинку, чтобы заменить первую карточку.")
+    custom_first_slide_upload = st.file_uploader(
+        "Файл готового первого слайда", type=["jpg", "jpeg", "png", "webp"],
+        key="custom_first_slide_upload",
+        help="Загрузи свою полностью готовую обложку. Она будет использована только после включения галочки выше."
+    )
+    if use_custom_first_slide and not custom_first_slide_upload:
+        st.warning("Для готового первого слайда нужен файл.")
+    elif custom_first_slide_upload and not use_custom_first_slide:
+        st.caption("Файл выбран, но пока не используется: включи галочку «Использовать готовый первый слайд».")
+
     use_custom_last_slide = st.checkbox("Использовать готовый последний слайд", value=False, key="use_custom_last_slide")
-    custom_last_slide_upload = None
-    if use_custom_last_slide:
-        custom_last_slide_upload = st.file_uploader(
-            "Загрузить готовый последний слайд", type=["jpg", "jpeg", "png", "webp"],
-            key="custom_last_slide_upload",
-            help="Подготовь картинку в пропорциях выбранного формата. Она будет показана полностью, без CTA, лого и других наложений."
-        )
-        if not custom_last_slide_upload:
-            st.caption("Загрузи готовую картинку, чтобы заменить последнюю карточку.")
+    custom_last_slide_upload = st.file_uploader(
+        "Файл готового последнего слайда", type=["jpg", "jpeg", "png", "webp"],
+        key="custom_last_slide_upload",
+        help="Загрузи свою полностью готовую финальную карточку. Она будет использована только после включения галочки выше."
+    )
+    if use_custom_last_slide and not custom_last_slide_upload:
+        st.warning("Для готового последнего слайда нужен файл.")
+    elif custom_last_slide_upload and not use_custom_last_slide:
+        st.caption("Файл выбран, но пока не используется: включи галочку «Использовать готовый последний слайд».")
+
+    st.caption(f"Версия приложения: {CAROUSEL_RENDERER_VERSION}")
 
     st.divider()
     st.subheader("🖼️ Фон для всех слайдов (NEW)")
@@ -1172,6 +1185,25 @@ if custom_bg_upload:
     custom_bg_b64 = image_to_base64(custom_bg_upload)
 else:
     custom_bg_b64 = ""
+
+# ── v5.18: проверяем явную конфигурацию до генерации ──
+custom_first_slide_name = uploaded_file_name(custom_first_slide_upload)
+custom_last_slide_name = uploaded_file_name(custom_last_slide_upload)
+cta_image_name = uploaded_file_name(cta_image_upload, "дефолтный CTA badge" if use_default_cta_image else "не используется")
+custom_bg_name = uploaded_file_name(custom_bg_upload)
+generation_validation_errors = []
+generation_validation_warnings = []
+if use_custom_first_slide and not custom_first_slide_b64:
+    generation_validation_errors.append("Включён готовый первый слайд, но его файл не загружен.")
+if use_custom_last_slide and not custom_last_slide_b64:
+    generation_validation_errors.append("Включён готовый последний слайд, но его файл не загружен.")
+# The same uploaded data in a ready edge slot and CTA slot is almost always a misplaced file.
+if cta_image_upload and custom_first_slide_b64 and cta_image_b64 == custom_first_slide_b64:
+    generation_validation_errors.append("Один и тот же файл выбран как готовый первый слайд и CTA-картинка. Убери обложку из поля CTA-картинки.")
+if cta_image_upload and custom_last_slide_b64 and cta_image_b64 == custom_last_slide_b64:
+    generation_validation_errors.append("Один и тот же файл выбран как готовый последний слайд и CTA-картинка. Убери финальную карточку из поля CTA-картинки.")
+if custom_first_slide_b64 and custom_last_slide_b64 and custom_first_slide_b64 == custom_last_slide_b64:
+    generation_validation_warnings.append("Для первого и последнего слайда выбран один и тот же файл. Это допустимо, но проверь, что так задумано.")
 
 # hide_logo_on_custom_bg и custom_bg_opacity уже из sidebar (session_state)
 # Значения по умолчанию, если ключи ещё не созданы
@@ -1267,6 +1299,24 @@ if generate_images:
         selected_slides = [index for index in selected_slides if index not in ready_slide_indexes]
         st.caption("Готовые первый/последний слайды исключены из генерации фоновых изображений: они будут использованы как есть.")
 
+# ─── 5.5: Проверка перед генерацией ─────────────────────────────────
+st.markdown('<div class="step-header">5.5 🔎 Проверка перед генерацией</div>', unsafe_allow_html=True)
+check_left, check_right = st.columns(2)
+with check_left:
+    st.markdown(f"**Количество слайдов:** {num_slides}")
+    st.markdown(f"**Готовый первый слайд:** {'✅ ' + custom_first_slide_name if custom_first_slide_b64 else '— не используется'}")
+    st.markdown(f"**Готовый последний слайд:** {'✅ ' + custom_last_slide_name if custom_last_slide_b64 else '— не используется'}")
+with check_right:
+    st.markdown(f"**Общий фон:** {'✅ ' + custom_bg_name if custom_bg_b64 else '— не используется'}")
+    st.markdown(f"**CTA внутри обычного последнего слайда:** {'✅ ' + cta_image_name if cta_image_b64 else '— выключен'}")
+    st.caption(f"Рендерер: {CAROUSEL_RENDERER_VERSION}")
+for error in generation_validation_errors:
+    st.error(f"⛔ {error}")
+for warning in generation_validation_warnings:
+    st.warning(f"⚠️ {warning}")
+if not generation_validation_errors:
+    st.success("Проверка пройдена: программа будет использовать именно конфигурацию, указанную выше.")
+
 # ─── Шаг 6: Генерация ────────────────────────────────────────────────
 st.markdown('<div class="step-header">6️ Генерация</div>', unsafe_allow_html=True)
 
@@ -1277,12 +1327,16 @@ with gc2:
     if not blog_post: st.info(" Вставьте текст поста")
 
 if generate_btn:
-    if not openai_key: st.error("❌ Введите OpenAI API Key!")
+    if generation_validation_errors:
+        st.error("⛔ Карусель не создана: сначала исправь отмеченные выше настройки файлов.")
+    elif not openai_key: st.error("❌ Введите OpenAI API Key!")
     elif not blog_post: st.error("❌ Вставьте текст поста!")
     else:
         progress = st.progress(0, text="Начинаем генерацию...")
 
+        # A new carousel without a reference must not inherit style data from the previous one.
         style_info = {}
+        st.session_state.style_info = {}
         if ref_image and openai_key:
             progress.progress(10, text=" Анализ референса...")
             try:
@@ -1318,7 +1372,9 @@ if generate_btn:
                     st.divider()
         except Exception as e: st.error(f"❌ Ошибка: {e}"); st.stop()
 
+        # Новый запуск всегда начинает с чистой карты FLUX-фонов: ссылки от прошлой карусели не переиспользуются.
         generated_images = {}
+        st.session_state.generated_images = {}
         if generate_images and fal_key and image_prompt_template and selected_slides:
             progress.progress(50, text=" Генерация изображений...")
             flux_model_id = FLUX_MODELS[flux_model]
@@ -1356,6 +1412,25 @@ if generate_btn:
                 initial_slide_index=st.session_state.preview_slide_index,
             )
             st.session_state.carousel_html = carousel_html
+            # Freeze the exact media configuration used by this generation. Live edits and exports reuse it.
+            st.session_state.carousel_assets = {
+                "logo_b64": logo_b64,
+                "cta_image_b64": cta_image_b64,
+                "custom_bg_b64": custom_bg_b64,
+                "custom_bg_opacity": bg_opacity_val,
+                "hide_logo_on_custom_bg": hide_logo_flag,
+                "logo_position": st.session_state.get("logo_position", "Правый верх (дефолт)"),
+                "logo_size": st.session_state.get("logo_size", 38),
+                "custom_first_slide_b64": custom_first_slide_b64,
+                "custom_last_slide_b64": custom_last_slide_b64,
+                "generated_images": dict(generated_images),
+                "first_name": custom_first_slide_name if custom_first_slide_b64 else "",
+                "last_name": custom_last_slide_name if custom_last_slide_b64 else "",
+                "cta_name": cta_image_name if cta_image_b64 else "",
+                "background_name": custom_bg_name if custom_bg_b64 else "",
+                "num_slides": len(slides_data),
+                "renderer_version": CAROUSEL_RENDERER_VERSION,
+            }
             st.session_state.carousel_renderer_version = CAROUSEL_RENDERER_VERSION
             st.session_state.slides_generated = True
             tmp_dir = tempfile.mkdtemp()
@@ -1553,6 +1628,7 @@ if st.session_state.get("carousel_data"):
         try:
             # Используем переменные из основного скоупа (format_info, brand_name и т.д.)
             # Они определены выше в каждом rerun
+            carousel_assets = st.session_state.get("carousel_assets") or {}
             rebuilt_html = build_carousel_html(
                 slides_data=new_data,
                 format_info=format_info,
@@ -1566,18 +1642,18 @@ if st.session_state.get("carousel_data"):
                 font_name=font_choice,
                 font_url=FONTS[font_choice],
                 style_info=st.session_state.get("style_info"),
-                generated_images=st.session_state.get("generated_images", {}),
+                generated_images=carousel_assets.get("generated_images", st.session_state.get("generated_images", {})),
                 profile_photo_b64=image_to_base64(profile_photo) if 'profile_photo' in globals() and profile_photo else "",
                 content_format_name=content_format.get("name", "") if 'content_format' in globals() else "",
-                logo_b64=logo_b64 if 'logo_b64' in globals() else "",
-                cta_image_b64=cta_image_b64 if 'cta_image_b64' in globals() else "",
-                custom_bg_b64=custom_bg_b64 if 'custom_bg_b64' in globals() else "",
-                custom_bg_opacity=st.session_state.get("custom_bg_opacity", 1.0),
-                hide_logo_on_custom_bg=st.session_state.get("hide_logo_custom_bg", False),
-                logo_position=st.session_state.get("logo_position", "Правый верх (дефолт)"),
-                logo_size=st.session_state.get("logo_size", 38),
-                custom_first_slide_b64=custom_first_slide_b64 if 'custom_first_slide_b64' in globals() else "",
-                custom_last_slide_b64=custom_last_slide_b64 if 'custom_last_slide_b64' in globals() else "",
+                logo_b64=carousel_assets.get("logo_b64", logo_b64 if 'logo_b64' in globals() else ""),
+                cta_image_b64=carousel_assets.get("cta_image_b64", cta_image_b64 if 'cta_image_b64' in globals() else ""),
+                custom_bg_b64=carousel_assets.get("custom_bg_b64", custom_bg_b64 if 'custom_bg_b64' in globals() else ""),
+                custom_bg_opacity=carousel_assets.get("custom_bg_opacity", st.session_state.get("custom_bg_opacity", 1.0)),
+                hide_logo_on_custom_bg=carousel_assets.get("hide_logo_on_custom_bg", st.session_state.get("hide_logo_custom_bg", False)),
+                logo_position=carousel_assets.get("logo_position", st.session_state.get("logo_position", "Правый верх (дефолт)")),
+                logo_size=carousel_assets.get("logo_size", st.session_state.get("logo_size", 38)),
+                custom_first_slide_b64=carousel_assets.get("custom_first_slide_b64", custom_first_slide_b64 if 'custom_first_slide_b64' in globals() else ""),
+                custom_last_slide_b64=carousel_assets.get("custom_last_slide_b64", custom_last_slide_b64 if 'custom_last_slide_b64' in globals() else ""),
                 initial_slide_index=st.session_state.get("preview_slide_index", 0),
             )
             st.session_state.carousel_html = rebuilt_html
@@ -1599,6 +1675,14 @@ if st.session_state.get("carousel_data"):
 # ─── Превью и экспорт ────────────────────────────────────────────────
 if st.session_state.carousel_html:
     st.markdown('<div class="step-header">7️ Превью</div>', unsafe_allow_html=True)
+    carousel_assets = st.session_state.get("carousel_assets") or {}
+    with st.expander("🔎 Конфигурация этой созданной карусели", expanded=False):
+        st.write(f"**Слайдов:** {carousel_assets.get('num_slides', len(st.session_state.carousel_data or []))}")
+        st.write(f"**Готовый первый слайд:** {carousel_assets.get('first_name') or 'не используется'}")
+        st.write(f"**Готовый последний слайд:** {carousel_assets.get('last_name') or 'не используется'}")
+        st.write(f"**Общий фон:** {carousel_assets.get('background_name') or 'не используется'}")
+        st.write(f"**CTA-картинка:** {carousel_assets.get('cta_name') or 'не используется'}")
+        st.caption(f"Снимок настроек зафиксирован при генерации • {carousel_assets.get('renderer_version', CAROUSEL_RENDERER_VERSION)}")
     st.markdown('<div class="preview-container">', unsafe_allow_html=True)
     st.components.v1.html(st.session_state.carousel_html, height=format_info["preview_h"] + 100, scrolling=False)
     st.markdown('</div>', unsafe_allow_html=True)
@@ -1621,18 +1705,18 @@ if st.session_state.carousel_html:
             font_name=font_choice,
             font_url=FONTS[font_choice],
             style_info=st.session_state.get("style_info"),
-            generated_images=st.session_state.get("generated_images", {}),
+            generated_images=carousel_assets.get("generated_images", st.session_state.get("generated_images", {})),
             profile_photo_b64=image_to_base64(profile_photo) if profile_photo else "",
             content_format_name=content_format.get("name", ""),
-            logo_b64=logo_b64,
-            cta_image_b64=cta_image_b64,
-            custom_bg_b64=custom_bg_b64,
-            custom_bg_opacity=bg_opacity_val,
-            hide_logo_on_custom_bg=hide_logo_flag,
-            logo_position=st.session_state.get("logo_position", "Правый верх (дефолт)"),
-            logo_size=st.session_state.get("logo_size", 38),
-            custom_first_slide_b64=custom_first_slide_b64,
-            custom_last_slide_b64=custom_last_slide_b64,
+            logo_b64=carousel_assets.get("logo_b64", logo_b64),
+            cta_image_b64=carousel_assets.get("cta_image_b64", cta_image_b64),
+            custom_bg_b64=carousel_assets.get("custom_bg_b64", custom_bg_b64),
+            custom_bg_opacity=carousel_assets.get("custom_bg_opacity", bg_opacity_val),
+            hide_logo_on_custom_bg=carousel_assets.get("hide_logo_on_custom_bg", hide_logo_flag),
+            logo_position=carousel_assets.get("logo_position", st.session_state.get("logo_position", "Правый верх (дефолт)")),
+            logo_size=carousel_assets.get("logo_size", st.session_state.get("logo_size", 38)),
+            custom_first_slide_b64=carousel_assets.get("custom_first_slide_b64", custom_first_slide_b64),
+            custom_last_slide_b64=carousel_assets.get("custom_last_slide_b64", custom_last_slide_b64),
         )
         st.components.v1.html(zip_export_html, height=120, scrolling=False)
 
